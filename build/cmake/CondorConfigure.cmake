@@ -94,7 +94,9 @@ if(NOT WINDOWS)
         endif()
         include (FindPythonLibs)
         message(STATUS "Got PYTHONLIBS_VERSION_STRING = ${PYTHONLIBS_VERSION_STRING}")
-	set(PYTHON_MODULE_SUFFIX ".so")
+	if (PYTHON_EXECUTABLE)
+	  execute_process( COMMAND "${PYTHON_EXECUTABLE}" "-c" "import distutils.sysconfig; import sys; sys.stdout.write(distutils.sysconfig.get_config_var('SO'))" OUTPUT_VARIABLE PYTHON_MODULE_SUFFIX)
+	endif()
     else()
         # We need to do this the hard way for both python2 and python3 support in the same build
         # This will be easier in cmake 3
