@@ -94,6 +94,7 @@ if(NOT WINDOWS)
         endif()
         include (FindPythonLibs)
         message(STATUS "Got PYTHONLIBS_VERSION_STRING = ${PYTHONLIBS_VERSION_STRING}")
+	set(PYTHON_MODULE_SUFFIX ".so")
     else()
         # We need to do this the hard way for both python2 and python3 support in the same build
         # This will be easier in cmake 3
