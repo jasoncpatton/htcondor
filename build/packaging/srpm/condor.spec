@@ -538,16 +538,16 @@ Provides: %{name}-python = %{version}-%{release}
 Provides: %{name}-python%{?_isa} = %{version}-%{release}
 Obsoletes: %{name}-python < %{version}-%{release}
 
-%if 0%{?rhel} >= 7 && ! %uw_build
-# auto provides generator does not pick these up for some reason
-    %ifarch x86_64
-Provides: classad.so()(64bit)
-Provides: htcondor.so()(64bit)
-    %else
-Provides: classad.so
-Provides: htcondor.so
-    %endif
-%endif
+#%if 0%{?rhel} >= 7 && ! %uw_build
+## auto provides generator does not pick these up for some reason
+#    %ifarch x86_64
+#Provides: classad.so()(64bit)
+#Provides: htcondor.so()(64bit)
+#    %else
+#Provides: classad.so
+#Provides: htcondor.so
+#    %endif
+#%endif
 
 %description -n python2-condor
 The python bindings allow one to directly invoke the C++ implementations of
@@ -564,16 +564,16 @@ Requires: python36
 Requires: %name = %version-%release
 Requires: boost169-python3
 
-%if 0%{?rhel} >= 7 && ! %uw_build
+#%if 0%{?rhel} >= 7 && ! %uw_build
 # auto provides generator does not pick these up for some reason
-    %ifarch x86_64
-Provides: classad.so()(64bit)
-Provides: htcondor.so()(64bit)
-    %else
-Provides: classad.so
-Provides: htcondor.so
-    %endif
-%endif
+#    %ifarch x86_64
+#Provides: classad.so()(64bit)
+#Provides: htcondor.so()(64bit)
+#    %else
+#Provides: classad.so
+#Provides: htcondor.so
+#    %endif
+#%endif
 
 %description -n python3-condor
 The python bindings allow one to directly invoke the C++ implementations of
@@ -1009,12 +1009,12 @@ cp %{SOURCE8} %{buildroot}%{_datadir}/condor/
 # Install perl modules
 
 # Install python-binding libs
-%if 0%{?rhel} >= 7
-%ifarch x86_64
-mv %{buildroot}/usr/lib64/python3.6/site-packages/py3classad.so %{buildroot}/usr/lib64/python3.6/site-packages/classad.so
-mv %{buildroot}/usr/lib64/python3.6/site-packages/py3htcondor.so %{buildroot}/usr/lib64/python3.6/site-packages/htcondor.so
-%endif
-%endif
+#%if 0%{?rhel} >= 7
+#%ifarch x86_64
+#mv %{buildroot}/usr/lib64/python3.6/site-packages/py3classad.so %{buildroot}/usr/lib64/python3.6/site-packages/classad.so
+#mv %{buildroot}/usr/lib64/python3.6/site-packages/py3htcondor.so %{buildroot}/usr/lib64/python3.6/site-packages/htcondor.so
+#%endif
+#%endif
 
 
 # we must place the config examples in builddir so %doc can find them
@@ -1092,10 +1092,10 @@ rm -rf %{buildroot}%{_mandir}/man1/install_release.1*
 rm -rf %{buildroot}%{_mandir}/man1/uniq_pid_midwife.1*
 rm -rf %{buildroot}%{_mandir}/man1/uniq_pid_undertaker.1*
 
-rm -rf %{buildroot}%{_datadir}/condor/python/{htcondor,classad}.so
-rm -rf %{buildroot}%{_datadir}/condor/{libpyclassad*,htcondor,classad}.so
-rm -rf %{buildroot}%{_datadir}/condor/python/{py3htcondor,py3classad}.so
-rm -rf %{buildroot}%{_datadir}/condor/{libpy3classad*,py3htcondor,py3classad}.so
+#rm -rf %{buildroot}%{_datadir}/condor/python/{htcondor,classad}.so
+#rm -rf %{buildroot}%{_datadir}/condor/{libpyclassad*,htcondor,classad}.so
+#rm -rf %{buildroot}%{_datadir}/condor/python/{py3htcondor,py3classad}.so
+#rm -rf %{buildroot}%{_datadir}/condor/{libpy3classad*,py3htcondor,py3classad}.so
 
 # Install BOSCO
 mkdir -p %{buildroot}%{python_sitelib}
@@ -1552,22 +1552,24 @@ rm -rf %{buildroot}
 %files -n python2-condor
 %defattr(-,root,root,-)
 %_bindir/condor_top
-%_libdir/libpyclassad*.so
+%_libdir/libpyclassad2*.so
 %_libexecdir/condor/libclassad_python_user.so
 %_libexecdir/condor/libcollector_python_plugin.so
-%{python_sitearch}/classad.so
-%{python_sitearch}/htcondor.so
+%{python_sitearch}/classad/
+%{python_sitearch}/htcondor/
+%{python_sitearch}/htcondor-*.egg-info/
 
 %if 0%{?rhel} >= 7
 %ifarch x86_64
 %files -n python3-condor
 %defattr(-,root,root,-)
 %_bindir/condor_top
-%_libdir/libpy3classad*.so
-%_libexecdir/condor/libclassad_python3_user.so
-%_libexecdir/condor/libcollector_python3_plugin.so
-/usr/lib64/python3.6/site-packages/classad.so
-/usr/lib64/python3.6/site-packages/htcondor.so
+%_libdir/libpyclassad3*.so
+%_libexecdir/condor/libclassad_python_user.cpython-3*.so
+%_libexecdir/condor/libcollector_python_plugin.cpython-3*.so
+%{python3_other_sitearch}/classad/
+%{python3_other_sitearch}/htcondor/
+%{python3_other_sitearch}/htcondor-*.egg-info/
 %endif
 %endif
 %endif
