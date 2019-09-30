@@ -29,7 +29,7 @@ if (WITH_PYTHON_BINDINGS AND PYTHONLIBS_FOUND)
       DEPENDS ${DEPS} classad_module htcondor)
 
     add_custom_target(python_bindings ALL DEPENDS ${TIMESTAMP_FILE})
-    install(CODE "execute_process(WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} COMMAND ${PYTHON_EXECUTABLE} ${SETUP_PY} install --root=${CMAKE_INSTALL_PREFIX} --install-lib=${CMAKE_INSTALL_PREFIX}${C_PYTHONARCHLIB})")
+    install(CODE "execute_process(WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} COMMAND ${PYTHON_EXECUTABLE} ${SETUP_PY} install --root=$ENV{DESTDIR}/${CMAKE_INSTALL_PREFIX} --install-lib=${C_PYTHONARCHLIB})")
   endif()
   
   if (NOT WINDOWS AND DEFINED PYTHON3_VERSION_STRING AND NOT ${SYSTEM_NAME} MATCHES "fc27")
@@ -41,7 +41,7 @@ if (WITH_PYTHON_BINDINGS AND PYTHONLIBS_FOUND)
       DEPENDS ${DEPS} py3classad_module py3htcondor)
     
     add_custom_target(python3_bindings ALL DEPENDS ${TIMESTAMP3_FILE})
-    install(CODE "execute_process(WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} COMMAND ${PYTHON3_EXECUTABLE} ${SETUP_PY} install --root=${CMAKE_INSTALL_PREFIX} --install-lib=${C_PYTHON3ARCHLIB})")
+    install(CODE "execute_process(WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} COMMAND ${PYTHON3_EXECUTABLE} ${SETUP_PY} install --root=$ENV{DESTDIR}/${CMAKE_INSTALL_PREFIX} --install-lib=${C_PYTHON3ARCHLIB})")
   endif()
 
   
