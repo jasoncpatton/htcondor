@@ -41,7 +41,7 @@ if (WITH_PYTHON_BINDINGS AND PYTHONLIBS_FOUND)
       DEPENDS ${DEPS} py3classad_module py3htcondor)
     
     add_custom_target(python3_bindings ALL DEPENDS ${TIMESTAMP3_FILE})
-    install(CODE "execute_process(WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} COMMAND ${PYTHON3_EXECUTABLE} ${SETUP_PY} install --root=${CMAKE_INSTALL_PREFIX} --install-lib=${CMAKE_INSTALL_PREFIX}${C_PYTHON3ARCHLIB})")
+    install(CODE "execute_process(WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} COMMAND ${PYTHON3_EXECUTABLE} ${SETUP_PY} install --root=${CMAKE_INSTALL_PREFIX} --install-lib=${C_PYTHON3ARCHLIB})")
   endif()
 
   
