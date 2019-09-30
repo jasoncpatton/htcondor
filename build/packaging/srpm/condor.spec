@@ -1009,12 +1009,14 @@ cp %{SOURCE8} %{buildroot}%{_datadir}/condor/
 # Install perl modules
 
 # Install python-binding libs
-#%if 0%{?rhel} >= 7
-#%ifarch x86_64
-#mv %{buildroot}/usr/lib64/python3.6/site-packages/py3classad.so %{buildroot}/usr/lib64/python3.6/site-packages/classad.so
-#mv %{buildroot}/usr/lib64/python3.6/site-packages/py3htcondor.so %{buildroot}/usr/lib64/python3.6/site-packages/htcondor.so
-#%endif
-#%endif
+%if %python
+mv %{buildroot}/usr%{python_sitearch %{buildroot}%{python_sitearch}
+%if 0%{?rhel} >= 7
+%ifarch x86_64
+mv %{buildroot}/usr%{python3_other_sitearch} %{buildroot}%{python3_other_sitearch}
+%endif
+%endif
+%endif
 
 
 # we must place the config examples in builddir so %doc can find them
