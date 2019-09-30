@@ -1010,7 +1010,7 @@ cp %{SOURCE8} %{buildroot}%{_datadir}/condor/
 
 # Install python-binding libs
 %if %python
-mv %{buildroot}/usr%{python_sitearch %{buildroot}%{python_sitearch}
+mv %{buildroot}/usr%{python_sitearch} %{buildroot}%{python_sitearch}
 %endif
 %if %python && 0%{?rhel} >= 7
 %ifarch x86_64
