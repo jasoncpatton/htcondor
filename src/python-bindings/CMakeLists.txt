@@ -98,8 +98,8 @@ if(WINDOWS)
 				target_include_directories( htcondor PUBLIC ${PYTHON_INCLUDE_DIRS} )
 
 				install ( TARGETS pyclassad DESTINATION ${C_LIB} )
-				install ( TARGETS htcondor DESTINATION ${C_PYTHONARCHLIB}/htcondor )
-				install ( TARGETS classad_module DESTINATION ${C_PYTHONARCHLIB}/classad )
+				install ( TARGETS htcondor DESTINATION ${CMAKE_INSTALL_PREFIX}\\${C_PYTHONARCHLIB}\\htcondor )
+				install ( TARGETS classad_module DESTINATION ${CMAKE_INSTALL_PREFIX}\\${C_PYTHONARCHLIB}\\classad )
 			endif(DEFINED PYTHON_VERSION_STRING) # python27 was found
 
 			if (DEFINED PYTHON3_VERSION_STRING) # python36 was found
@@ -169,8 +169,8 @@ if(WINDOWS)
 				target_include_directories( py3htcondor PUBLIC ${PYTHON3_INCLUDE_DIRS} )
 
 				install ( TARGETS py3classad DESTINATION ${C_LIB} )
-				install ( TARGETS py3htcondor DESTINATION ${C_PYTHONARCHLIB}/htcondor )
-				install ( TARGETS py3classad_module DESTINATION ${C_PYTHONARCHLIB}/classad )
+				install ( TARGETS py3htcondor DESTINATION ${CMAKE_INSTALL_PREFIX}\\${C_PYTHONARCHLIB}\\htcondor )
+				install ( TARGETS py3classad_module DESTINATION ${CMAKE_INSTALL_PREFIX}\\${C_PYTHONARCHLIB}\\classad )
 
 			endif(DEFINED PYTHON3_VERSION_STRING) # python36 was found
 
@@ -294,8 +294,8 @@ else()
         set_target_properties(htcondor PROPERTIES INSTALL_RPATH "${PYTHON_RPATH}")
       endif()
 
-      install ( TARGETS htcondor DESTINATION ${C_PYTHONARCHLIB}/htcondor )
-      install ( TARGETS classad_module DESTINATION ${C_PYTHONARCHLIB}/classad )
+      install ( TARGETS htcondor DESTINATION ${CMAKE_INSTALL_PREFIX}/${C_PYTHONARCHLIB}/htcondor )
+      install ( TARGETS classad_module DESTINATION ${CMAKE_INSTALL_PREFIX}/${C_PYTHONARCHLIB}/classad )
 
       if ( DARWIN )
           set_target_properties( pyclassad PROPERTIES INSTALL_NAME_DIR ${CMAKE_CURRENT_BINARY_DIR} )
@@ -377,8 +377,8 @@ else()
         set_target_properties(py3htcondor PROPERTIES INSTALL_RPATH "${PYTHON_RPATH}")
       endif()
 
-      install ( TARGETS py3htcondor DESTINATION ${C_PYTHON3ARCHLIB}/htcondor )
-      install ( TARGETS py3classad_module DESTINATION ${C_PYTHON3ARCHLIB}/classad )
+      install ( TARGETS py3htcondor DESTINATION ${CMAKE_INSTALL_PREFIX}/${C_PYTHON3ARCHLIB}/htcondor )
+      install ( TARGETS py3classad_module DESTINATION ${CMAKE_INSTALL_PREFIX}/${C_PYTHON3ARCHLIB}/classad )
 
       if ( DARWIN )
           set_target_properties( py3classad PROPERTIES INSTALL_NAME_DIR ${CMAKE_CURRENT_BINARY_DIR} )
