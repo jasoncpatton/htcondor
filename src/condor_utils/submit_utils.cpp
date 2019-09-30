@@ -6207,9 +6207,14 @@ int SubmitHash::SetRequirements()
 					}
 				}
 
+				bool sign_s3_urls = param_boolean("SIGN_S3_URLS", true);
 				for (auto it = methods.begin(); it != methods.end(); ++it) {
+					std::string method = *it;
+					if (sign_s3_urls && (method == "s3")) {
+						method = "https";
+					}
 					answer += " && stringListIMember(\"";
-					answer += *it;
+					answer += method;
 					answer += "\",TARGET.HasFileTransferPluginMethods)";
 				}
 			}
@@ -6940,7 +6945,7 @@ int SubmitHash::SetTransferFiles()
 	job->LookupBool(ATTR_TRANSFER_INPUT, transfer_stdin);
 	if (transfer_stdin) {
 		std::string stdin_fname;
-		job->LookupString(ATTR_JOB_INPUT, stdin_fname);
+		(void) job->LookupString(ATTR_JOB_INPUT, stdin_fname);
 		if (!stdin_fname.empty()) {
 			if (pInputFilesSizeKb) {
 				*pInputFilesSizeKb += calc_image_size_kb(stdin_fname.c_str());
