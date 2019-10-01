@@ -129,6 +129,7 @@ set( C_LIBEXEC		libexec )
 set( C_SBIN			sbin)
 
 set( C_PYTHONARCHLIB lib/python)
+set( C_PYTHON3ARCHLIB lib/python3)
 
 set( C_INCLUDE		include)
 set( C_INCLUDE_PUBLIC		include)
