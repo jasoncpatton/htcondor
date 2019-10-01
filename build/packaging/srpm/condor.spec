@@ -877,6 +877,16 @@ populate %{_libdir}/condor %{buildroot}/%{_datadir}/condor/condor_ssh_to_job_ssh
 # Drop in a symbolic link for backward compatability
 ln -s %{_libdir}/condor/condor_ssh_to_job_sshd_config_template %{buildroot}/%_sysconfdir/condor/condor_ssh_to_job_sshd_config_template
 
+# Move python bindings out of /usr/share/condor
+%if %python
+mv %{buildroot}%{_datadir}/condor/python %{buildroot}%{python_sitearch}
+%if 0%{?rhel} >= 7
+%ifarch x86_64
+mv %{buildroot}%{_datadir}/condor/python3 %{buildroot}%{python3_other_sitearch}
+%endif
+%endif
+%endif
+
 # Only trigger on 32-bit RHEL6
 if [ -d %{buildroot}%{_datadir}/condor/python2.6 ]; then
     mv %{buildroot}%{_datadir}/condor/python2.6 %{buildroot}%{_libdir}/
@@ -1007,18 +1017,6 @@ cp %{SOURCE8} %{buildroot}%{_datadir}/condor/
 %endif
 
 # Install perl modules
-
-# Install python-binding libs
-%if %python
-mv %{buildroot}/usr/lib/python %{buildroot}%{python_sitearch}
-rm -rf %{buildroot}/usr/lib/debug/usr/lib/python
-%if 0%{?rhel} >= 7
-%ifarch x86_64
-mv %{buildroot}/usr/lib/python3 %{buildroot}%{python3_other_sitearch}
-rm -rf %{buildroot}/usr/lib/debug/usr/lib/python3
-%endif
-%endif
-%endif
 
 # we must place the config examples in builddir so %doc can find them
 mv %{buildroot}/etc/examples %_builddir/%name-%tarball_version
