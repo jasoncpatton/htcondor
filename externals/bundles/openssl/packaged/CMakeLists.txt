@@ -16,7 +16,7 @@ add_library(openssl-headers INTERFACE)
 # openssl always depends on crypto
 target_link_libraries(openssl INTERFACE crypto)
 
-if (APPLE)
+if (APPLE AND NOT "$ENV{CONDA_BUILD}" STREQUAL "1")
 	include(FetchContent)
 
 	exec_program (sw_vers ARGS -productVersion OUTPUT_VARIABLE MACOS_PRODUCT_VER)
@@ -73,8 +73,10 @@ else()
 	find_library(LIBSSL_FOUND "ssl")
 
 	# If we dlopen libssl.so, this defines its name
-	find_so_name( LIBSSL_SO ${LIBSSL_FOUND} )
-	set( LIBSSL_SO ${LIBSSL_SO} PARENT_SCOPE )
+	if (DLOPEN_SECURITY_LIBS)
+		find_so_name( LIBSSL_SO ${LIBSSL_FOUND} )
+		set( LIBSSL_SO ${LIBSSL_SO} PARENT_SCOPE )
+	endif()
 	find_library(LIBCRYPTO_FOUND_LOCAL "crypto")
 
 	# and set the contents of the targets appropriately
