@@ -126,7 +126,6 @@ if(WINDOWS)
 				# non-existent python27_d, the problem is in the order that you include headers
 				# set(PYTHON_DEBUG_LIBRARY ${BOOST_LD}/python27_d.lib)
 
-				get_filename_component(PYTHON3_LIBRARY_FILENAME ${PYTHON3_LIBRARIES} NAME)
 				string(REGEX REPLACE "([0-9]+[.][0-9]+).*" "\\1" _PYTHON_VERSION ${PYTHON3_VERSION_STRING})
 				if ( ${PACKAGE_VERSION} MATCHES "([0-9]+)[.]([0-9]+)[.]([0-9]+)" )
 				  set( PY3CLASSAD_LIB_NAME "pyclassad${_PYTHON_VERSION}_${CMAKE_MATCH_1}_${CMAKE_MATCH_2}_${CMAKE_MATCH_3}" )
@@ -321,7 +320,6 @@ else()
       include_directories(${BOOST_INCLUDE})
       link_directories(${BOOST_LD})
 
-      get_filename_component(PYTHON3_LIBRARY_FILENAME ${PYTHON3_LIBRARIES} NAME)
       string(REGEX REPLACE "([0-9]+[.][0-9]+).*" "\\1" _PYTHON3_VERSION ${PYTHON3_VERSION_STRING})
       if ( ${PACKAGE_VERSION} MATCHES "([0-9]+)[.]([0-9]+)[.]([0-9]+)" )
           set( PY3CLASSAD_LIB_NAME "pyclassad${_PYTHON3_VERSION}_${CMAKE_MATCH_1}_${CMAKE_MATCH_2}_${CMAKE_MATCH_3}" )
