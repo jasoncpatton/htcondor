@@ -1,6 +1,9 @@
 # We'll be deprecating event.cpp shortly.
 set( HTCONDOR_BINDINGS_SOURCES collector.cpp negotiator.cpp config.cpp daemon_and_ad_types.cpp daemon_location.cpp dc_tool.cpp export_headers.h old_boost.h schedd.cpp credd.cpp secman.cpp event.cpp module_lock.cpp export_compat_classad.cpp enable_deprecation_warnings.cpp claim.cpp startd.cpp bulk_query_iterator.cpp JobEventLog.cpp exception_utils.cpp )
 
+get_target_property(UTILS_LIB_NAME condor_utils OUTPUT_NAME)
+find_library(CLASSAD_LIBRARY classad)
+
 if(WINDOWS)
   if(WITH_PYTHON_BINDINGS AND ( PYTHONLIBS_FOUND OR PYTHON3LIBS_FOUND ))
     # Modern compilers complain about using the deprecated std::auto_ptr.
@@ -75,7 +78,7 @@ if(WINDOWS)
 				endif()
 
 				condor_shared_lib( pyclassad classad.cpp classad_wrapper.h exprtree_wrapper.h exception_utils.cpp classad_exceptions.cpp )
-				target_link_libraries( pyclassad ${CLASSADS_FOUND} ${THE_BOOST_LIBS} ${PYTHON_LIBRARIES} )
+				target_link_libraries( pyclassad ${CLASSAD_LIBRARY} ${THE_BOOST_LIBS} ${PYTHON_LIBRARIES} )
 				set_target_properties( pyclassad PROPERTIES OUTPUT_NAME "${PYCLASSAD_LIB_NAME}" )
 				target_include_directories( pyclassad PUBLIC ${PYTHON_INCLUDE_DIRS} )
 
@@ -91,13 +94,13 @@ if(WINDOWS)
 				# This is to be used as a CLASSAD_USER_LIBS extension so we can invoke
 				# python functions.
 				add_library( classad_python_user SHARED classad_python_user.cpp )
-				target_link_libraries( classad_python_user condor_utils pyclassad ${CONDOR_WIN_LIBS})
+				target_link_libraries( classad_python_user ${UTILS_LIB_NAME} pyclassad ${CONDOR_WIN_LIBS})
 				set_target_properties(classad_python_user PROPERTIES SUFFIX "${PYTHON_DLL_SUFFIX}" )
 				target_include_directories( classad_python_user PUBLIC ${PYTHON_INCLUDE_DIRS} )
 				install ( TARGETS classad_python_user DESTINATION "${C_LIBEXEC}" )
 
 				add_library( htcondor SHARED htcondor.cpp ${HTCONDOR_BINDINGS_SOURCES} )
-				target_link_libraries( htcondor pyclassad condor_utils ${THE_BOOST_LIBS} ${PYTHON_LIBRARIES} ${CONDOR_WIN_LIBS} )
+				target_link_libraries( htcondor pyclassad ${UTILS_LIB_NAME} ${THE_BOOST_LIBS} ${PYTHON_LIBRARIES} ${CONDOR_WIN_LIBS} )
 				set_target_properties( htcondor PROPERTIES SUFFIX "${PYTHON_DLL_SUFFIX}" )
 				target_include_directories( htcondor PUBLIC ${PYTHON_INCLUDE_DIRS} )
 
@@ -141,7 +144,7 @@ if(WINDOWS)
 					)
 
 				condor_shared_lib( py3classad classad.cpp classad_wrapper.h exprtree_wrapper.h exception_utils.cpp classad_exceptions.cpp )
-				target_link_libraries( py3classad ${CLASSADS_FOUND} ${THE_BOOST_LIBS} ${PYTHON3_LIBRARIES} )
+				target_link_libraries( py3classad ${CLASSAD_LIBRARY} ${THE_BOOST_LIBS} ${PYTHON3_LIBRARIES} )
 				set_target_properties( py3classad PROPERTIES OUTPUT_NAME "${PY3CLASSAD_LIB_NAME}" )
 				target_include_directories( py3classad PUBLIC ${PYTHON3_INCLUDE_DIRS} )
 
@@ -158,14 +161,14 @@ if(WINDOWS)
 				# This is to be used as a CLASSAD_USER_LIBS extension so we can invoke
 				# python functions.
 				add_library( classad_python3_user SHARED classad_python_user.cpp )
-				target_link_libraries( classad_python3_user condor_utils py3classad ${THE_BOOST_LIBS} ${CONDOR_WIN_LIBS})
+				target_link_libraries( classad_python3_user ${UTILS_LIB_NAME} py3classad ${THE_BOOST_LIBS} ${CONDOR_WIN_LIBS})
 				set_target_properties(classad_python3_user PROPERTIES PREFIX "" OUTPUT_NAME classad_python_user PDB_NAME classad_python3_user)
 				set_target_properties(classad_python3_user PROPERTIES SUFFIX "${PYTHON3_DLL_SUFFIX}" )
 				target_include_directories( classad_python3_user PUBLIC ${PYTHON3_INCLUDE_DIRS} )
 				install ( TARGETS classad_python3_user DESTINATION "${C_LIBEXEC}" )
 
 				add_library( py3htcondor SHARED htcondor.cpp ${HTCONDOR_BINDINGS_SOURCES} )
-				target_link_libraries( py3htcondor py3classad condor_utils ${THE_BOOST_LIBS} ${PYTHON3_LIBRARIES} ${CONDOR_WIN_LIBS} )
+				target_link_libraries( py3htcondor py3classad ${UTILS_LIB_NAME} ${THE_BOOST_LIBS} ${PYTHON3_LIBRARIES} ${CONDOR_WIN_LIBS} )
 				set_target_properties( py3htcondor PROPERTIES PREFIX "" OUTPUT_NAME py3htcondor PDB_NAME py3htcondor)
 				set_target_properties( py3htcondor PROPERTIES PREFIX "" RUNTIME_OUTPUT_NAME htcondor PDB_NAME py3htcondor)
 				set_target_properties( py3htcondor PROPERTIES SUFFIX "${PYTHON3_DLL_SUFFIX}" )
@@ -239,7 +242,7 @@ else()
       endif()
       condor_shared_lib( pyclassad classad.cpp classad_wrapper.h exprtree_wrapper.h exception_utils.cpp classad_exceptions.cpp )
       target_include_directories( pyclassad PUBLIC ${PYTHON_INCLUDE_DIRS} )
-      target_link_libraries( pyclassad ${CLASSADS_FOUND} -l${PYTHON_BOOST_LIB} ${PYTHON_LIBRARIES} )
+      target_link_libraries( pyclassad ${CLASSAD_LIBRARY} -l${PYTHON_BOOST_LIB} ${PYTHON_LIBRARIES} )
       set_target_properties( pyclassad PROPERTIES OUTPUT_NAME "${PYCLASSAD_LIB_NAME}" )
       set_target_properties( pyclassad PROPERTIES COMPILE_FLAGS "-fPIC")
 
@@ -257,7 +260,7 @@ else()
       # python functions.
       add_library( classad_python_user SHARED classad_python_user.cpp )
       target_include_directories( classad_python_user PUBLIC ${PYTHON_INCLUDE_DIRS} )
-      target_link_libraries( classad_python_user condor_utils pyclassad )
+      target_link_libraries( classad_python_user ${UTILS_LIB_NAME} pyclassad )
       set_target_properties(classad_python_user PROPERTIES SUFFIX "${PYTHON_MODULE_SUFFIX}" )
       if ( NOT CMAKE_SKIP_RPATH )
         set_target_properties(classad_python_user PROPERTIES INSTALL_RPATH "${CONDOR_RPATH}")
@@ -269,7 +272,7 @@ else()
       # We should probably deprecate log_reader.cpp (shortly after we deprecate event.cpp).
       add_library( htcondor SHARED htcondor.cpp ${HTCONDOR_BINDINGS_SOURCES} log_reader.cpp )
       target_include_directories( htcondor PUBLIC ${PYTHON_INCLUDE_DIRS} )
-      target_link_libraries( htcondor pyclassad condor_utils -l${PYTHON_BOOST_LIB} ${PYTHON_LIBRARIES} )
+      target_link_libraries( htcondor pyclassad ${UTILS_LIB_NAME} -l${PYTHON_BOOST_LIB} ${PYTHON_LIBRARIES} )
       set_target_properties( htcondor PROPERTIES PREFIX "" )
       set_target_properties( htcondor PROPERTIES SUFFIX "${PYTHON_MODULE_SUFFIX}" )
       if ( NOT CMAKE_SKIP_RPATH )
@@ -316,7 +319,7 @@ else()
       endif()
       condor_shared_lib( py3classad classad.cpp classad_wrapper.h exprtree_wrapper.h exception_utils.cpp classad_exceptions.cpp )
       target_include_directories( py3classad PUBLIC ${PYTHON3_INCLUDE_DIRS} )
-      target_link_libraries( py3classad ${CLASSADS_FOUND} -l${PYTHON3_BOOST_LIB} ${PYTHON3_LIBRARIES} )
+      target_link_libraries( py3classad ${CLASSAD_LIBRARY} -l${PYTHON3_BOOST_LIB} ${PYTHON3_LIBRARIES} )
       set_target_properties( py3classad PROPERTIES OUTPUT_NAME "${PY3CLASSAD_LIB_NAME}" )
       set_target_properties( py3classad PROPERTIES COMPILE_FLAGS "-fPIC")
 
@@ -334,7 +337,7 @@ else()
       # python functions.
       add_library( classad_python3_user SHARED classad_python_user.cpp )
       target_include_directories( classad_python3_user PUBLIC ${PYTHON3_INCLUDE_DIRS} )
-      target_link_libraries( classad_python3_user condor_utils py3classad )
+      target_link_libraries( classad_python3_user ${UTILS_LIB_NAME} py3classad )
       set_target_properties( classad_python3_user PROPERTIES OUTPUT_NAME classad_python_user )
       set_target_properties( classad_python3_user PROPERTIES SUFFIX "${PYTHON3_MODULE_SUFFIX}" )
       if ( NOT CMAKE_SKIP_RPATH )
@@ -351,7 +354,7 @@ else()
       # We should probably deprecate log_reader.cpp (shortly after we deprecate event.cpp).
       add_library( py3htcondor SHARED htcondor.cpp ${HTCONDOR_BINDINGS_SOURCES} log_reader.cpp )
       target_include_directories( py3htcondor PUBLIC ${PYTHON3_INCLUDE_DIRS} )
-      target_link_libraries( py3htcondor py3classad condor_utils -l${PYTHON3_BOOST_LIB} ${PYTHON3_LIBRARIES} )
+      target_link_libraries( py3htcondor py3classad ${UTILS_LIB_NAME} -l${PYTHON3_BOOST_LIB} ${PYTHON3_LIBRARIES} )
       set_target_properties( py3htcondor PROPERTIES PREFIX "" OUTPUT_NAME htcondor )
       set_target_properties( py3htcondor PROPERTIES SUFFIX "${PYTHON3_MODULE_SUFFIX}" )
       if ( NOT CMAKE_SKIP_RPATH )
@@ -387,7 +390,7 @@ else()
 
       # build libpyclassad *not* linked against libpython
       add_library( wheel_pyclassad SHARED classad.cpp classad_wrapper.h exprtree_wrapper.h exception_utils.cpp classad_exceptions.cpp )
-      target_link_libraries( wheel_pyclassad ${CLASSADS_FOUND} -l${PYTHON_BOOST_LIB} ${NOLINK_PYTHON_LIB} )
+      target_link_libraries( wheel_pyclassad ${CLASSAD_LIBRARY} -l${PYTHON_BOOST_LIB} ${NOLINK_PYTHON_LIB} )
       if ( APPLE )
         set_target_properties( wheel_pyclassad PROPERTIES SUFFIX ".dylib" )
         set_target_properties( wheel_pyclassad PROPERTIES INSTALL_NAME_DIR "${WHEEL_BINARY_DIR}/htcondor/htcondor_libs" )
@@ -410,7 +413,7 @@ else()
       # finally, build the htcondor module *not* linked against libpython
       # See note above about deprecating log_reader.cpp.
       add_library( wheel_htcondor SHARED htcondor.cpp ${HTCONDOR_BINDINGS_SOURCES} log_reader.cpp )
-      target_link_libraries( wheel_htcondor wheel_pyclassad condor_utils -l${PYTHON_BOOST_LIB} ${NOLINK_PYTHON_LIB} )
+      target_link_libraries( wheel_htcondor wheel_pyclassad ${UTILS_LIB_NAME} -l${PYTHON_BOOST_LIB} ${NOLINK_PYTHON_LIB} )
       set_target_properties( wheel_htcondor PROPERTIES PREFIX "" OUTPUT_NAME "htcondor" SUFFIX ".so")
       set_target_properties( wheel_htcondor PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${WHEEL_BINARY_DIR}/htcondor" )
       if ( NOT APPLE )
