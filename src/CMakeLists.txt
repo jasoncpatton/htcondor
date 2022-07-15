@@ -24,7 +24,7 @@
 # the 2nd arg is prio order for symbols ripping to prevent .o copy-mindging within the std:u
 add_subdirectories("${CONDOR_SOURCE_DIR}/src"
 	"${CONDOR_SOURCE_DIR}/src/bash_completion.d;${CONDOR_SOURCE_DIR}/src/classad_analysis;${CONDOR_SOURCE_DIR}/src/ccb;${CONDOR_SOURCE_DIR}/src/condor_io;${CONDOR_SOURCE_DIR}/src/condor_daemon_client;${CONDOR_SOURCE_DIR}/src/condor_daemon_core.V6;${CONDOR_SOURCE_DIR}/src/condor_procapi;${CONDOR_SOURCE_DIR}/src/condor_procd;${CONDOR_SOURCE_DIR}/src/condor_schedd.V6;${CONDOR_SOURCE_DIR}/src/condor_sysapi;${CONDOR_SOURCE_DIR}/src/condor_utils"
-	"${CONDOR_SOURCE_DIR}/src/classad;${CONDOR_SOURCE_DIR}/src/safefile")
+	"${CONDOR_SOURCE_DIR}/src/classad;${CONDOR_SOURCE_DIR}/src/safefile;${CONDOR_MASTER_SRC_DIR};${CONDOR_NEGOTIATOR_SRC_DIR};${CONDOR_SOURCE_DIR}/src/condor_collector.V6;${CONDOR_SOURCE_DIR}/src/condor_shadow.V6.1;${CONDOR_STARTD_SRC_DIR};${CONDOR_SOURCE_DIR}/src/condor_starter.V6.1;${CONDOR_SOURCE_DIR}/src/condor_credd;${CONDOR_SOURCE_DIR}/src/condor_gridmanager;${CONDOR_SOURCE_DIR}/src/condor_had;${CONDOR_SOURCE_DIR}/src/condor_transferd;${CONDOR_SOURCE_DIR}/src/arc_gahp;${CONDOR_SOURCE_DIR}/src/azure_gahp;${CONDOR_SOURCE_DIR}/src/condor_c-gahp;${CONDOR_SOURCE_DIR}/src/condor_ft-gahp;${CONDOR_SOURCE_DIR}/src/condor_vm-gahp;${CONDOR_SOURCE_DIR}/src/ec2_gahp;${CONDOR_SOURCE_DIR}/src/gce_gahp;${CONDOR_SOURCE_DIR}/src/nordugrid_gahp;${CONDOR_SOURCE_DIR}/src/openstack_gahp")
 
 #if (BUILD_TESTING AND NOT WINDOWS)
 if (BUILD_TESTING)
