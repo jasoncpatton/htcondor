@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/opt/anaconda1anaconda2anaconda3/bin/python
 
 import os
 import time
