@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/opt/anaconda1anaconda2anaconda3/bin/python
 r"""Print HTCondor machine ClassAd attributes derived from Google Cloud Metadata Servers
 
 Converts Google Cloud instance metadata into HTCondor ClassAd attribute/value
