@@ -266,7 +266,7 @@ class ElasticsearchInterface(GenericInterface):
                     updated_mappings[outer_key] = {}
                     for inner_key in missing_inner_keys:
                         updated_mappings[outer_key][inner_key] = mappings[outer_key][inner_key]
-                update_mappings = True
+                    update_mappings = True
         if update_mappings:
             logging.info(f"Updated mappings for index {index}")
             logging.debug(f"{pprint.pformat(updated_mappings)}")
