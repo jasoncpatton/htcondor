@@ -154,7 +154,7 @@ class ElasticsearchInterface(GenericInterface):
                 properties[name] = {"type": "date", "format": "epoch_second"}
             for name in convert.BOOL_ATTRS:
                 properties[name] = {"type": "boolean"}
-            for name in convert.NESTED_ATTRS:
+            for name in convert.OBJECT_ATTRS:
                 properties[name] = {"type": "nested", "dynamic": True}
 
             dynamic_templates = [
@@ -173,6 +173,30 @@ class ElasticsearchInterface(GenericInterface):
                 {
                     "provisioned_attrs": {  # Attrs ending in "Provisioned" are
                         "match": "*Provisioned",  # resource numbers
+                        "mapping": {"type": "long"},
+                    }
+                },
+                {
+                    "transfer_input_stats": {
+                        "path_match" : "TransferInputStats.*",
+                        "mapping": {"type": "long"},
+                    }
+                },
+                {
+                    "transfer_output_stats": {
+                        "path_match": "TransferOutputStats.*",
+                        "mapping": {"type": "long"},
+                    }
+                },
+                {
+                    "dag_stats": {
+                        "path_match": "DAG_Stats.*",
+                        "mapping": {"type": "float"},
+                    }
+                },
+                {
+                    "num_holds_by_reason": {
+                        "path_match": "NumHoldsByReason.*",
                         "mapping": {"type": "long"},
                     }
                 },
@@ -213,9 +237,23 @@ class ElasticsearchInterface(GenericInterface):
                 properties[name] = {"type": "date", "format": "epoch_second"}
             for name in ad_source.bool_attrs:
                 properties[name] = {"type": "boolean"}
-            for name in ad_source.nested_attrs:
-                properties[name] = {"type": "nested", "dynamic": True}
+            for name in ad_source.object_attrs:
+                properties[name] = {"type": "object", "dynamic": True}
             dynamic_templates = ad_source.dynamic_templates
+
+        custom_properties = {
+            "ToE": {
+                "properties": {
+                    "How": {"type": "keyword"},
+                    "Who": {"type": "keyword"},
+                    "When": {"type": "date", "format": "epoch_second"},
+                    "HowCode": {"type": "short"},
+                    "ExitCode": {"type": "short"},
+                    "ExitBySignal": {"type": "boolean"},
+                }
+            }
+        }
+        properties.update(custom_properties)
 
         mappings = {
             "dynamic_templates": dynamic_templates,
@@ -246,32 +284,32 @@ class ElasticsearchInterface(GenericInterface):
         if client.indices.exists_alias(name=index):
             index = self.get_active_index(index)
 
-        mappings = self.make_mappings(**kwargs)
-        settings = self.make_settings(**kwargs)
+        new_mappings = self.make_mappings(**kwargs)
+        new_settings = self.make_settings(**kwargs)
 
         if not client.indices.exists(index=index):  # push new index if doesn't exist
             logging.info(f"Creating new index {index}.")
-            client.indices.create(index=index, mappings=mappings, settings=settings)
+            client.indices.create(index=index, mappings=new_mappings, settings=new_settings)
             if log_mappings and log_dir:
                 mappings_file = log_dir / "condor_adstash_elasticsearch_last_mappings.json"
                 logging.debug(f"Writing new mappings to {mappings_file}.")
-                json.dump(mappings, open(mappings_file, "w"), indent=2)
+                json.dump(new_mappings, open(mappings_file, "w"), indent=2)
             return
 
         # otherwise check existing index for missing mappings properties
         update_mappings = False
         updated_mappings = {}
         existing_mappings = self.get_mappings(index)
-        for outer_key in mappings:
+        for outer_key, new_mapping in new_mappings.items():
             if outer_key not in existing_mappings:  # add anything missing
-                updated_mappings[outer_key] = mappings[outer_key]
+                updated_mappings[outer_key] = new_mapping
                 update_mappings = True
-            elif isinstance(mappings[outer_key], dict):  # update missing keys in any existing dicts
-                missing_inner_keys = set(mappings[outer_key]) - set(existing_mappings[outer_key])
+            elif isinstance(new_mapping, dict):  # update missing keys in any existing dicts
+                missing_inner_keys = set(new_mappings[outer_key]) - set(existing_mappings[outer_key])
                 if len(missing_inner_keys) > 0:
                     updated_mappings[outer_key] = {}
                     for inner_key in missing_inner_keys:
-                        updated_mappings[outer_key][inner_key] = mappings[outer_key][inner_key]
+                        updated_mappings[outer_key][inner_key] = new_mapping[inner_key]
                     update_mappings = True
         if update_mappings:
             logging.info(f"Updated mappings for index {index}")
@@ -334,10 +372,27 @@ class ElasticsearchInterface(GenericInterface):
         return n_errors
 
 
+    def conform_ads_to_previous_mappings(self, ads, index):
+        # It's possible that previously unknown attributes were stored
+        # in Elasticsearch docs in keyword fields. We should continue
+        # storing text representations of these values.
+        index = self.get_active_index(index)
+        mappings = self.get_mappings(index)
+        for ad in ads:
+            ad_fields = {k.casefold(): k for k in ad.keys() if not k.islower()}
+            mapping_fields = {k for k, m in mappings.items() if k.islower() and m["type"] == "keyword"}
+            for field in ad_fields & mapping_fields:
+                logging.debug(f"Storing string into previously defined field {field}")
+                ad[field] = str(ad[ad_fields[field]])
+                if len(ad[field] > 256):
+                    ad[field] = f"{ad[field][:253]}..."
+
+
     def post_ads(self, ads, index, metadata={}, **kwargs):
         client = self.get_handle()
 
         self.setup_index(index, **kwargs)
+        self.conform_ads_to_previous_mappings(ads, index)
         body = self.make_bulk_body(ads, metadata)
         result = client.bulk(body=body, index=index)
         n_errors = self.get_error_info(result)

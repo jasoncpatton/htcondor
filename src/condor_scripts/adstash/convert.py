@@ -228,6 +228,7 @@ INT_ATTRS = {
     "KillSigTimeout",
     "LastHoldReasonCode",
     "LastHoldReasonSubCode",
+    "LastRemoteWallClockTime",
     "LastJobStatus",
     "LocalSysCpu",
     "LocalUserCpu",
@@ -420,7 +421,7 @@ BOOL_ATTRS = {
     "WantResAd",
 }
 
-NESTED_ATTRS = {
+OBJECT_ATTRS = {
     "DAG_Stats",
     "NumHoldsByReason",
     "ToE",
@@ -501,7 +502,7 @@ UNIVERSE = {
 _LAUNCH_TIME = int(time.time())
 
 
-def to_json(ad, return_dict=False, reduce_data=False):
+def to_json(ad, return_dict=False):
     if ad.get("TaskType") == "ROOT":
         return None
 
@@ -510,12 +511,10 @@ def to_json(ad, return_dict=False, reduce_data=False):
     result["RecordTime"] = record_time(ad)
 
     result["ScheddName"] = ad.get("GlobalJobId", "UNKNOWN").split("#")[0]
-    result["StartdSlot"] = ad.get(
-        "RemoteHost", ad.get("LastRemoteHost", "UNKNOWN@UNKNOWN")
-    ).split("@")[0]
-    result["StartdName"] = ad.get(
-        "RemoteHost", ad.get("LastRemoteHost", "UNKNOWN@UNKNOWN")
-    ).split("@")[-1]
+    try:
+        result["StartdSlot"], result["StartdName"] = ad.get("RemoteHost", ad.get("LastRemoteHost", "UNKNOWN@UNKNOWN")).split("@", maxsplit=1)
+    except ValueError:
+        result["StartdSlot"] = result["StartdName"] = ad.get("RemoteHost", ad.get("LastRemoteHost", "UNKNOWN@UNKNOWN"))
 
     result["Status"] = STATUS.get(ad.get("JobStatus"), "Unknown")
     result["Universe"] = UNIVERSE.get(ad.get("JobUniverse"), "Unknown")
@@ -524,8 +523,7 @@ def to_json(ad, return_dict=False, reduce_data=False):
 
     if return_dict:
         return result
-    else:
-        return json.dumps(result)
+    return json.dumps(result)
 
 
 def record_time(ad, fallback_to_launch=True):
@@ -572,7 +570,7 @@ KNOWN_ATTRS = (
         | INT_ATTRS
         | DATE_ATTRS
         | BOOL_ATTRS
-        | NESTED_ATTRS
+        | OBJECT_ATTRS
         | IGNORE_ATTRS
 )
 KNOWN_ATTRS_MAP = {x.casefold(): x for x in KNOWN_ATTRS}
@@ -680,7 +678,7 @@ def bulk_convert_ad_data(ad, result):
                 )
                 key = f"{key}_STRING"
                 value = str(value)
-        elif key in NESTED_ATTRS:
+        elif key in OBJECT_ATTRS:
             try:
                 value = dict(value)
             except ValueError:
