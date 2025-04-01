@@ -1,11 +1,13 @@
 
 import random
 import time
-import urllib
 
-import urllib3
+from urllib.parse import quote
 
-from credmon.CredentialMonitors.LocalCredmon import LocalCredmon, TokenInfo
+import requests
+
+from credmon.CredentialMonitors.LocalCredmon import LocalCredmon
+
 
 class ClientCredmon(LocalCredmon):
     """
@@ -25,16 +27,16 @@ class ClientCredmon(LocalCredmon):
 
         self.client_id = self.get_credmon_config("CLIENT_ID")
         if not self.client_id:
-            raise Exception(f"{self.credmon_name}_CREDMON_{self.provider}_CLIENT_ID configuration parameter must be set to use the client credential credmon")
+            raise RuntimeError(f"{self.credmon_name}_CREDMON_{self.provider}_CLIENT_ID configuration parameter must be set to use the client credential credmon")
         secret_file = self.get_credmon_config("CLIENT_SECRET_FILE")
         if not secret_file:
-            raise Exception(f"{self.credmon_name}_CREDMON_{self.provider}_CLIENT_SECRET_FILE configuration parameter must be set to use the client credential credmon")
+            raise RuntimeError(f"{self.credmon_name}_CREDMON_{self.provider}_CLIENT_SECRET_FILE configuration parameter must be set to use the client credential credmon")
 
         with open(secret_file) as fp:
-            self.secret = fp.read().strip()
+            self._secret = fp.read().strip()
 
-        if not self.secret:
-            raise Exception(f"Client credentials flow credmon configured with an empty secret file ({self.credmon_name}_CREDMON_{self.provider}_CLIENT_SECRET_FILE)")
+        if not self._secret:
+            raise RuntimeError(f"Client credentials flow credmon configured with an empty secret file ({self.credmon_name}_CREDMON_{self.provider}_CLIENT_SECRET_FILE)")
 
 
     @property
@@ -50,18 +52,19 @@ class ClientCredmon(LocalCredmon):
         if self._token_endpoint and (self._token_endpoint_resolved + self._token_endpoint_lifetime > time.time()):
             return self._token_endpoint
 
-        resp = urllib3.request("GET", self.token_issuer + "/.well-known/openid-configuration")
-        if resp.status != 200:
-            msg = f"When performing OIDC metadata discovery, {self.token_issuer} responded with {resp.status}"
+        resp = requests.get(self.token_issuer + "/.well-known/openid-configuration")
+        if resp.status_code != 200:
+            msg = f"When performing OIDC metadata discovery, {self.token_issuer} responded with {resp.status_code}"
             self.log.error(msg)
             if self._token_endpoint:
                 return self._token_endpoint
-            raise Exception(msg)
+            raise RuntimeError(msg)
 
         try:
             resp_json = resp.json()
-        except Exception as exc:
-            self.log.error(f"When performing OIDC metadata discovery, {self.token_issuer} had non-JSON response: {exc}")
+        except ValueError:
+            msg = f"When performing OIDC metadata discovery, {self.token_issuer} had non-JSON response: {resp.text[:10]}..."
+            self.log.error(msg)
             if self._token_endpoint:
                 return self._token_endpoint
             raise
@@ -71,7 +74,7 @@ class ClientCredmon(LocalCredmon):
             self.log.error(msg)
             if self._token_endpoint:
                 return self._token_endpoint
-            raise Exception(msg)
+            raise RuntimeError(msg)
 
         self._token_endpoint = resp_json["token_endpoint"]
         self._token_endpoint_resolved = time.time()
@@ -86,36 +89,38 @@ class ClientCredmon(LocalCredmon):
         If successful, write the access token to disk.
         """
 
-        info = self.generate_access_token_info(username, token_name)
+        token_info = self.generate_access_token_info(username, token_name)
 
-        scopes = info.scopes
-        if info.profile == "wlcg" or info.profile == "wlcg:1.0":
-            scopes.append("wlcg")
-        scopes = " ".join(scopes)
-        if info.sub:
-            scopes.append(f"condor.user:{urllib.parse.quote(info.sub)}")
+        scope_list = token_info.scopes
+        if token_info.profile in {"wlcg", "wlcg:1.0"}:
+            scope_list.append("wlcg")
+        if token_info.sub:
+            scope_list.append(f"condor.user:{quote(token_info.sub)}")
 
-        fields = {
+        payload = {
             "client_id": self.client_id,
-            "scopes": scopes,
             "grant_type": "client_credentials",
         }
-        if info.audience:
-            fields["audience"] = " ".join(info.audience)
 
-        self.log.debug(f"Requesting token from {self.token_endpoint} with following info: {fields}")
-        fields["client_secret"] = self.secret
+        if scope_list:
+            payload["scopes"] = " ".join(scope_list)
+        if token_info.audience:
+            payload["audience"] = " ".join(token_info.audience)
 
-        resp = urllib3.request("POST", self.token_endpoint, fields=fields)
-        del fields["client_secret"]
-        if resp.status != 200:
-            self.log.error(f"HTTP status failure ({resp.status}) when requesting token from {self.token_endpoint} with parameters {fields}")
+        self.log.debug(f"Requesting token from {self.token_endpoint} with following payload: {payload}")
+
+        payload["client_secret"] = self._secret
+        resp = requests.post(self.token_endpoint, data=payload)
+        del payload["client_secret"]
+
+        if resp.status_code != 200:
+            self.log.error(f"HTTP status failure ({resp.status_code}) when requesting token from {self.token_endpoint} with payload {payload}")
             return False
 
         try:
             resp_json = resp.json()
-        except Exception as exc:
-            self.log.error(f"Token issuer {self.token_issuer} failed to have a valid JSON response: {exc}")
+        except ValueError:
+            self.log.error(f"Token issuer {self.token_issuer} failed to have a valid JSON response: {resp.text[:10]}")
             return False
 
         access_token = resp_json.get("access_token")
@@ -127,5 +132,5 @@ class ClientCredmon(LocalCredmon):
         if not lifetime:
             self.log.warning(f"Token issuer {self.token_issuer} failed to indicate when access token will expire; assuming {self.token_lifetime}")
 
-        return self.write_access_token(username, token_name, lifetime, access_token)
+        return self.write_access_token(username, token_name, lifetime, access_token, serialized=False)
 

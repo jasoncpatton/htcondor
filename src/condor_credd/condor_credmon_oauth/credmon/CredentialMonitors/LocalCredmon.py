@@ -53,13 +53,21 @@ class LocalCredmon(OAuthCredmon):
         self.token_aud = ""
         self.token_ver = "scitoken:2.0"
         if htcondor != None:
-            self._private_key_location = self.get_credmon_config("PRIVATE_KEY", "/etc/condor/scitokens-private.pem")
-            if self._private_key_location != None and os.path.exists(self._private_key_location):
-                with open(self._private_key_location, 'r') as private_key:
-                    self._private_key = private_key.read()
-                self.private_key_id = self.get_credmon_config("KEY_ID", "local")
+            if self.credmon_name == "LOCAL":
+                self._private_key_location = self.get_credmon_config("PRIVATE_KEY", "/etc/condor/scitokens-private.pem")
+                if self._private_key_location is not None and os.path.exists(self._private_key_location):
+                    with open(self._private_key_location) as private_key:
+                        self._private_key = private_key.read()
+                    # algorithm is hardcoded to ES256, warn if private key does not appear to use EC
+                    if "BEGIN EC PRIVATE KEY" not in self._private_key.split("\n")[0]:
+                        self.log.warning(f"{self.credmon_name}_CREDMON_PRIVATE_KEY must use elipitcal curve cryptograph algorithm")
+                        self.log.warning("`scitokens-admin-create-key --pem-private` should be used with `--ec` option")
+                        self.log.warning("Errors are likely to occur when attempting to serialize SciTokens")
+                    self.private_key_id = self.get_credmon_config("KEY_ID", "local")
+                else:
+                    self.log.error(f"{self.credmon_name}_CREDMON_PRIVATE_KEY specified at {self._private_key_location}, but key not found or not readable")
             else:
-                self.log.error(f"{self.credmon_name}_CREDMON_PRIVATE_KEY specified at {self._private_key_location}, but key not found or not readable")
+                self._private_key_location = None
             self.token_issuer = self.get_credmon_config("ISSUER", self.token_issuer)
             self.authz_template = self.get_credmon_config("AUTHZ_TEMPLATE", self.authz_template)
             self.authz_group_mapfile = self.get_credmon_config("AUTHZ_GROUP_MAPFILE", self.authz_group_mapfile)
@@ -73,11 +81,6 @@ class LocalCredmon(OAuthCredmon):
             self._private_key_location = None
         if not self.token_issuer and htcondor:
             self.token_issuer = 'https://{}'.format(htcondor.param["FULL_HOSTNAME"])
-        # algorithm is hardcoded to ES256, warn if private key does not appear to use EC
-        if (self._private_key_location is not None) and ("BEGIN EC PRIVATE KEY" not in self._private_key.split("\n")[0]):
-            self.log.warning(f"{self.credmon_name}_CREDMON_PRIVATE_KEY must use elipitcal curve cryptograph algorithm")
-            self.log.warning("`scitokens-admin-create-key --pem-private` should be used with `--ec` option")
-            self.log.warning("Errors are likely to occur when attempting to serialize SciTokens")
 
 
     def get_credmon_config(self, config: str, default: str="") -> str:
@@ -126,11 +129,11 @@ class LocalCredmon(OAuthCredmon):
             else:
                 try:
                     groups = get_user_groups(username, self.authz_group_mapfile)
-                    self.log.info("Found {n} groups for user {username}".format(n=len(groups), username=username))
+                    self.log.info(f"Found {len(groups)} groups for user {username}")
                     for groupname in groups:
                         scopes.append(self.authz_group_template.format(groupname=groupname))
                 except IOError:
-                    self.log.exception("Could not open {mapfile}, cannot add group authorizations".format(mapfile=self.authz_group_mapfile))
+                    self.log.exception(f"Could not open {self.authz_group_mapfile}, cannot add group authorizations")
 
         profile = ""
         if self.token_ver:
@@ -142,23 +145,25 @@ class LocalCredmon(OAuthCredmon):
 
         return TokenInfo(sub=username, scopes=scopes, profile=profile, audience=aud_list)
 
-    def write_access_token(self, username: str, token_name: str, token_lifetime: str, serialized_token: str) -> bool:
+    def write_access_token(self, username: str, token_name: str, token_lifetime: str, access_token: str, serialized=True) -> bool:
         """
-        Write a serialized access token to the credential directory.
+        Write a (serialized) access token to the credential directory.
         """
         (tmp_fd, tmp_access_token_path) = tempfile.mkstemp(dir = self.cred_dir)
         with os.fdopen(tmp_fd, 'w') as f:
+            if serialized:
+                access_token = access_token.decode()
             if self.token_use_json:
                 # use JSON if configured to do so, i.e. when
                 # LOCAL_CREDMON_TOKEN_USE_JSON = True (default)
                 f.write(json.dumps({
-                    "access_token": serialized_token.decode(),
+                    "access_token": access_token,
                     "expires_in":   int(token_lifetime),
                 }))
             else:
                 # otherwise write a bare token string when
                 # LOCAL_CREDMON_TOKEN_USE_JSON = False
-                f.write(serialized_token.decode()+'\n')
+                f.write(f"{access_token}\n")
 
         access_token_path = os.path.join(self.cred_dir, username, token_name + '.use')
 
@@ -166,11 +171,9 @@ class LocalCredmon(OAuthCredmon):
         try:
             atomic_rename(tmp_access_token_path, access_token_path)
         except OSError as e:
-            self.log.exception("Failure when writing out new access token to {}: {}.".format(
-                access_token_path, str(e)))
+            self.log.exception(f"Failure when writing out new access token to {access_token_path}: {str(e)}.")
             return False
-        else:
-            return True
+        return True
 
 
     def refresh_access_token(self, username, token_name):
@@ -255,7 +258,7 @@ def get_user_groups(username, mapfile):
     Note that every call will read the current file,
     regardless of if HTCondor or the credmon have
     been reconfigured.
-    
+
     Mapfiles have the format:
     * <userA> <group1>,<group2>,...,<groupN>
     * <userB> <group1>,<group2>,...,<groupN>
