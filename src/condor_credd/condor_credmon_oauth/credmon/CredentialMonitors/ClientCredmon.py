@@ -91,19 +91,19 @@ class ClientCredmon(LocalCredmon):
 
         token_info = self.generate_access_token_info(username, token_name)
 
-        scope_list = token_info.scopes
-        if token_info.profile in {"wlcg", "wlcg:1.0"}:
-            scope_list.append("wlcg")
-        if token_info.sub:
-            scope_list.append(f"condor.user:{quote(token_info.sub)}")
-
         payload = {
             "client_id": self.client_id,
             "grant_type": "client_credentials",
         }
 
-        if scope_list:
-            payload["scopes"] = " ".join(scope_list)
+        scope_list = token_info.scopes
+        scope_list.append("openid")
+        if token_info.profile in {"wlcg", "wlcg:1.0"}:
+            scope_list.append("wlcg")
+
+        payload["scope"] = " ".join(scope_list)
+        if token_info.sub:
+            payload["sub"] = token_info.sub
         if token_info.audience:
             payload["audience"] = " ".join(token_info.audience)
 
