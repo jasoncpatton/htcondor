@@ -17,476 +17,14 @@ import re
 import json
 import time
 import logging
+
 from functools import lru_cache
+from collections import defaultdict, OrderedDict
+
+from mapping import MAX_KEYWORD_LEN, REQUIRED_ATTRS, TIMESTAMP_ATTRS, DOC_ID_ATTRS
 
 import classad2 as classad
 
-
-# Attributes to be used in all projections to condor_history
-REQUIRED_ATTRS = {
-    "ClusterId",
-    "CompletionDate",
-    "EnteredCurrentStatus",
-    "EpochWriteDate",
-    "GlobalJobId",
-    "JobStatus",
-    "JobUniverse",
-    "LastRemoteHost",
-    "MyType",
-    "ProcId",
-    "RemoteHost",
-}
-
-# TEXT_ATTRS should only contain attrs that we want full text search on,
-# otherwise strings are stored as keywords.
-TEXT_ATTRS = {} or set()
-
-INDEXED_KEYWORD_ATTRS = {
-    "AccountingGroup",
-    "AcctGroup",
-    "AcctGroupUser",
-    "AssignedGPUs",
-    "AutoClusterId",
-    "AWSRegion",
-    "BatchProject",
-    "BatchQueue",
-    "CloudLabelNames",
-    "ConcurrencyLimits",
-    "CondorPlatform",
-    "CondorVersion",
-    "CUDAVersion",
-    "DAGNodeName",
-    "DAGParentNodeNames",
-    "DockerImage",
-    "FileSystemDomain",
-    "GLIDEIN_Entry_Name",
-    "GlideinClient",
-    "GlideinEntryName",
-    "GlideinFactory",
-    "GlideinFrontendName",
-    "GlideinName",
-    "GlobalJobId",
-    "GridJobId",
-    "GridJobStatus",
-    "GridResource",
-    "HoldKillSig",
-    "JobBatchName",
-    "JobDescription",
-    "JobKeyword",
-    "JobState",
-    "KillSig",
-    "LastRemoteHost",
-    "LastRemotePool",
-    "MATCH_EXP_JOB_GLIDECLIENT_Name",
-    "MATCH_EXP_JOB_GLIDEIN_ClusterId",
-    "MATCH_EXP_JOB_GLIDEIN_Entry_Name",
-    "MATCH_EXP_JOB_GLIDEIN_Factory",
-    "MATCH_EXP_JOB_GLIDEIN_Name",
-    "MATCH_EXP_JOB_GLIDEIN_Schedd",
-    "MATCH_EXP_JOB_GLIDEIN_SEs",
-    "MATCH_EXP_JOB_GLIDEIN_Site",
-    "MATCH_EXP_JOB_GLIDEIN_SiteWMS_JobId",
-    "MATCH_EXP_JOB_GLIDEIN_SiteWMS_Queue",
-    "MATCH_EXP_JOB_GLIDEIN_SiteWMS_Slot",
-    "MATCH_EXP_JOB_GLIDEIN_SiteWMS",
-    "MATCH_EXP_JOBGLIDEIN_ResourceName",
-    "MyType",
-    "NTDomain",
-    "OAuthServicesNeeded",
-    "Owner",
-    "ProjectName",
-    "RemoteHost",
-    "RemotePool",
-    "RemoveKillSig",
-    "ScheddName",
-    "ShouldTransferFiles",
-    "SingularityImage",
-    "StartdName",
-    "StartdSlot",
-    "Status",
-    "SubmitterGlobalJobId",
-    "SubmitterGroup",
-    "SubmitterNegotiatingGroup",
-    "TargetType",
-    "Universe",
-    "User",
-    "WhenToTransferOutput",
-    "x509UserProxyEmail",
-    "x509UserProxyFirstFQAN",
-    "x509UserProxyFQAN",
-    "x509UserProxySubject",
-    "x509UserProxyVOName",
-}
-
-NOINDEX_KEYWORD_ATTRS = {
-    "AllRemoteHosts",
-    "AppendFiles",
-    "Args",
-    "Arguments",
-    "Cmd",
-    "CompressFiles",
-    "ContainerServiceNames",
-    "DAGManNodesLog",
-    "DAGManNodesMask",
-    "DontEncryptInputFiles",
-    "DontEncryptOutputFiles",
-    "EncryptInputFiles",
-    "EncryptOutputFiles",
-    "Err",
-    "ExitReason",
-    "FetchFiles",
-    "FileRemaps",
-    "HoldReason",
-    "In",
-    "Iwd",
-    "JOBGLIDEIN_ResourceName",
-    "LastHoldReason",
-    "LastRejMatchReason",
-    "LocalFiles",
-    "ManifestDir",
-    "NotifyUser",
-    "OnExitHoldReason",
-    "OnExitRemoveReason",
-    "OtherJobRemoveRequirements",
-    "Out",
-    "OutputDestination",
-    "PeriodicHoldReason",
-    "PeriodicReleaseReason",
-    "PeriodicRemoveReason",
-    "PostCmd",
-    "PreCmd",
-    "PublicInputFiles",
-    "ReleaseReason",
-    "RemoteIwd",
-    "RemoveReason",
-    "Requirements",
-    "RootDir",
-    "StartdIpAddr",
-    "StartdPrincipal",
-    "StarterIpAddr",
-    "StarterPrincipal",
-    "SubmitEventNotes",
-    "SubmitEventUserNotes",
-    "TransferCheckpoint",
-    "TransferInput",
-    "TransferInputRemaps",
-    "TransferIntermediate",
-    "TransferOutput",
-    "TransferOutputRemaps",
-    "TransferPlugins",
-    "UserLog",
-    "UserLogFile",
-}
-
-FLOAT_ATTRS = {
-    "CPUsUsage",
-    "GPUsAverageUsage",
-    "GPUsMemoryUsage",
-    "JobBatchId",
-    "JobDuration",
-    "NetworkInputMb",
-    "NetworkOutputMb",
-    "Rank",
-}
-
-INT_ATTRS = {
-    "AutoClusterId",
-    "BatchRuntime",
-    "BlockReadKbytes",
-    "BlockReads",
-    "BlockWriteKbytes",
-    "BlockWrites",
-    "BufferBlockSize",
-    "BufferSize",
-    "BytesRecvd",
-    "BytesSent",
-    "ClusterId",
-    "CommittedSlotTime",
-    "CommittedSuspensionTime",
-    "CommittedTime",
-    "CoreSize",
-    "CpusProvisioned",
-    "CumulativeRemoteSysCpu",
-    "CumulativeRemoteUserCpu",
-    "CumulativeSlotTime",
-    "CumulativeSuspensionTime",
-    "CumulativeTransferTime",
-    "CurrentHosts",
-    "DAGManJobId",
-    "DataLocationsCount",
-    "DelegatedProxyExpiration",
-    "DiskProvisioned",
-    "DiskUsage_RAW",
-    "DiskUsage",
-    "ErrSize",
-    "ExecutableSize_RAW",
-    "ExecutableSize",
-    "ExitCode",
-    "ExitSignal",
-    "ExitStatus",
-    "GpusProvisioned",
-    "HoldReasonCode",
-    "HoldReasonSubCode",
-    "ImageSize_RAW",
-    "ImageSize",
-    "IOWait",
-    "JobLeaseDuration",
-    "JobMaxRetries",
-    "JobMaxVacateTime",
-    "JobPid",
-    "JobPrio",
-    "JobRunCount",
-    "JobStatus",
-    "JobSuccessExitCode",
-    "JobUniverse",
-    "KeepClaimIdle",
-    "KillSigTimeout",
-    "LastHoldReasonCode",
-    "LastHoldReasonSubCode",
-    "LastJobStatus",
-    "LocalSysCpu",
-    "LocalUserCpu",
-    "MachineAttrCpus0",
-    "MachineAttrSlotWeight0",
-    "MachineCount",
-    "MATCH_EXP_JOB_GLIDEIN_Job_Max_Time",
-    "MATCH_EXP_JOB_GLIDEIN_Max_Walltime",
-    "MATCH_EXP_JOB_GLIDEIN_MaxMemMBs",
-    "MATCH_EXP_JOB_GLIDEIN_Memory",
-    "MATCH_EXP_JOB_GLIDEIN_ProcId",
-    "MATCH_EXP_JOB_GLIDEIN_ToDie",
-    "MATCH_EXP_JOB_GLIDEIN_ToRetire",
-    "MaxHosts",
-    "MaxJobRetirementTime",
-    "MaxTransferInputMB",
-    "MaxTransferOutputMB",
-    "MaxWallTimeMins_RAW",
-    "MaxWallTimeMins",
-    "MemoryProvisioned",
-    "MemoryUsage",
-    "MinHosts",
-    "NextJobStartDelay",
-    "NoopJobExitCode",
-    "NoopJobExitSignal",
-    "NumCkpts_RAW",
-    "NumCkpts",
-    "NumJobCompletions",
-    "NumJobMatches",
-    "NumJobReconnects",
-    "NumJobStarts",
-    "NumPids",
-    "NumRestarts",
-    "NumShadowExceptions",
-    "NumShadowStarts",
-    "NumSystemHolds",
-    "OnExitHoldSubCode",
-    "OrigMaxHosts",
-    "OutSize",
-    "PeriodicHoldSubCode",
-    "PilotRestLifeTimeMins",
-    "PostCmdExitCode",
-    "PostCmdExitSignal",
-    "PostJobPrio1",
-    "PostJobPrio2",
-    "PreCmdExitCode",
-    "PreCmdExitSignal",
-    "PreJobPrio1",
-    "PreJobPrio2",
-    "ProcId",
-    "ProportionalSetSizeKb",
-    "RecentBlockReadKbytes",
-    "RecentBlockReads",
-    "RecentBlockWriteKbytes",
-    "RecentBlockWrites",
-    "RecentStatsLifetimeStarter",
-    "RemoteSlotID",
-    "RemoteSysCpu",
-    "RemoteUserCpu",
-    "RemoteWallClockTime",
-    "RequestCpus",
-    "RequestDisk",
-    "RequestGpus",
-    "RequestMemory",
-    "RequestVirtualMemory",
-    "ResidentSetSize_RAW",
-    "ResidentSetSize",
-    "ScratchDirFileCount",
-    "StackSize",
-    "StatsLifetimeStarter",
-    "SuccessCheckpointExitCode",
-    "SuccessCheckpointExitSignal",
-    "SuccessPostExitCode",
-    "SuccessPostExitSignal",
-    "SuccessPreExitCode",
-    "SuccessPreExitSignal",
-    "TotalSubmitProcs",
-    "TotalSuspensions",
-    "TransferInputSizeMB",
-    "WallClockCheckpoint",
-    "WindowsBuildNumber",
-    "WindowsMajorVersion",
-    "WindowsMinorVersion",
-}
-
-DATE_ATTRS = {
-    "CompletionDate",
-    "EnteredCurrentStatus",
-    "GLIDEIN_ToDie",
-    "GLIDEIN_ToRetire",
-    "JobCurrentFinishTransferInputDate",
-    "JobCurrentFinishTransferOutputDate",
-    "JobCurrentStartDate",
-    "JobCurrentStartExecutingDate",
-    "JobCurrentStartTransferInputDate",
-    "JobCurrentStartTransferOutputDate",
-    "JobDisconnectedDate",
-    "JobFinishedHookDone",
-    "JobLastStartDate",
-    "JobLeaseExpiration",
-    "JobQueueBirthdate",
-    "JobStartDate",
-    "LastJobLeaseRenewal",
-    "LastMatchTime",
-    "LastRejMatchTime",
-    "LastRemoteStatusUpdate",
-    "LastSuspensionTime",
-    "LastVacateTime_RAW",
-    "LastVacateTime",
-    "MATCH_GLIDEIN_ToDie",
-    "MATCH_GLIDEIN_ToRetire",
-    "QDate",
-    "RecordTime",
-    "ShadowBday",
-    "StageInFinish",
-    "StageInStart",
-    "StageOutFinish",
-    "StageOutStart",
-    "TransferInFinished",
-    "TransferInQueued",
-    "TransferInStarted",
-    "TransferOutFinished",
-    "TransferOutQueued",
-    "TransferOutStarted",
-}
-
-BOOL_ATTRS = {
-    "BufferFiles",
-    "CurrentStatusUnknown",
-    "DataflowJobSkipped",
-    "DockerOverrideEntrypoint",
-    "EncryptExecuteDirectory",
-    "EraseOutputAndErrorOnRestart",
-    "ExitBySignal",
-    "GlobusResubmit",
-    "IsNoopJob",
-    "JobCoreDumped",
-    "LeaveJobInQueue",
-    "LoadProfile",
-    "ManifestDesired",
-    "NiceUser",
-    "Nonessential",
-    "OnExitHold",
-    "OnExitRemove",
-    "PeriodicHold",
-    "PeriodicRelease",
-    "PeriodicRemove",
-    "PostCmdExitBySignal",
-    "PreCmdExitBySignal",
-    "PreserveRelativeExecutable",
-    "PreserveRelativePaths",
-    "RunAsOwner",
-    "SendCredential",
-    "SkipIfDataflow",
-    "SpoolOnEvict",
-    "StreamErr",
-    "StreamIn",
-    "StreamOut",
-    "SuccessCheckpointExitBySignal",
-    "SuccessPostExitBySignal",
-    "SuccessPreExitBySignal",
-    "TerminationPending",
-    "TransferErr",
-    "TransferExecutable",
-    "TransferIn",
-    "TransferOut",
-    "TransferQueued",
-    "TransferringInput",
-    "TransferringOutput",
-    "Use_x509UserProxy",
-    "UserLogUseXML",
-    "WantAdRevaluate",
-    "WantCheckpoint",
-    "WantCheckpointSignal",
-    "WantClaiming",
-    "WantCompletionVisaFromSchedD",
-    "WantDelayedUpdates",
-    "WantExecutionVisaFromStarter",
-    "WantFTOnCheckpoint",
-    "WantGracefulRemoval",
-    "WantIOProxy",
-    "WantMatchDiagnostics",
-    "WantMatching",
-    "WantParallelScheduling",
-    "WantParallelSchedulingGroups",
-    "WantPslotPreemption",
-    "WantRemoteIO",
-    "WantRemoteSyscalls",
-    "WantRemoteUpdates",
-    "WantResAd",
-}
-
-NESTED_ATTRS = {
-    "DAG_Stats",
-    "NumHoldsByReason",
-    "ToE",
-    "TransferInputStats",
-    "TransferOutputStats",
-}
-
-IGNORE_ATTRS = {
-    "AzureAdminKey",
-    "AzureAdminUsername",
-    "AzureAuthFile",
-    "ClaimId",
-    "CmdHash",
-    "EC2AccessKeyId",
-    "EC2KeyPair",
-    "EC2KeyPairFile",
-    "EC2SecretAccessKey",
-    "EC2SecurityGroups",
-    "EC2SecurityIDs",
-    "EC2UserData",
-    "EC2UserDataFile",
-    "Env",
-    "EnvDelim",
-    "Environment",
-    "ExecutableSize",
-    "GceAccount",
-    "GceAuthFile",
-    "GceJsonFile",
-    "GceMetadataFile",
-    "GlideinCredentialIdentifier",
-    "GlideinSecurityClass",
-    "JobCoreFileName",
-    "JobNotification",
-    "KeystoreAlias",
-    "KeystoreFile",
-    "KeystorePassphraseFile",
-    "LastPublicClaimId",
-    "PostArgs",
-    "PostArguments",
-    "PostEnv",
-    "PostEnvironment",
-    "PreArgs",
-    "PreArguments",
-    "PreEnv",
-    "PreEnvironment",
-    "PublicClaimId",
-    "ScitokensFile",
-    "SpooledOutputFiles",
-    "orig_environment",
-    "osg_environment",
-}
 
 STATUS = {
     0: "Unexpanded",
@@ -513,213 +51,284 @@ UNIVERSE = {
     12: "Local",
 }
 
-_LAUNCH_TIME = int(time.time())
-
-
-def to_json(ad, return_dict=False, reduce_data=False):
-    if ad.get("TaskType") == "ROOT":
-        return None
-
-    result = {}
-
-    result["RecordTime"] = record_time(ad)
-
-    result["ScheddName"] = ad.get("GlobalJobId", "UNKNOWN").split("#")[0]
-    result["StartdSlot"] = ad.get(
-        "RemoteHost", ad.get("LastRemoteHost", "UNKNOWN@UNKNOWN")
-    ).split("@")[0]
-    result["StartdName"] = ad.get(
-        "RemoteHost", ad.get("LastRemoteHost", "UNKNOWN@UNKNOWN")
-    ).split("@")[-1]
-
-    result["Status"] = STATUS.get(ad.get("JobStatus"), "Unknown")
-    result["Universe"] = UNIVERSE.get(ad.get("JobUniverse"), "Unknown")
-
-    bulk_convert_ad_data(ad, result)
-
-    if return_dict:
-        return result
-    else:
-        return json.dumps(result)
-
-
-def record_time(ad, fallback_to_launch=True):
-    """
-    RecordTime falls back to launch time as last-resort and for jobs in the queue
-
-    For Completed/Removed/Error jobs, try to update it:
-        - to CompletionDate if present
-        - else to EnteredCurrentStatus if present
-    For other (Running/Idle/Held/Suspended) jobs,
-         use EnteredCurrentStatus if present
-    For epoch ads, try to use EpochWriteDate
-    Else fall back to launch time
-    """
-    if ad["JobStatus"] in [3, 4, 6]:
-        if ad.get("CompletionDate", 0) > 0:
-            return ad["CompletionDate"]
-
-    if ad.get("EpochWriteDate", 0) > 0:
-        return ad["EpochWriteDate"]
-
-    if ad.get("EnteredCurrentStatus", 0) > 0:
-        return ad["EnteredCurrentStatus"]
-
-    if fallback_to_launch:
-        return _LAUNCH_TIME
-
-    return 0
-
-
-AUTO_ATTRS = {
-    "date_attrs": re.compile(r"^(.*)(Date)$"),
-    "provisioned_attrs": re.compile(r"^(.*)(Provisioned)$"),
-    "resource_request_attrs": re.compile(r"^(Request)([A-Za-df-z].*)$"),  # ignore "Requested"
-    "target_boolean_attrs": re.compile(r"^(Want|Has|Is)([A-Z_].*)$", re.IGNORECASE),
+FIELD_TYPE_MAP = {
+    "text": str,
+    "keyword": str,
+    "double": float,
+    "long": int,
+    "date": int,
+    "boolean": bool,
+    "object": dict,
+    "nested": list,
 }
 
 
-KNOWN_ATTRS = (
-        TEXT_ATTRS
-        | INDEXED_KEYWORD_ATTRS
-        | NOINDEX_KEYWORD_ATTRS
-        | FLOAT_ATTRS
-        | INT_ATTRS
-        | DATE_ATTRS
-        | BOOL_ATTRS
-        | NESTED_ATTRS
-        | IGNORE_ATTRS
-)
-KNOWN_ATTRS_MAP = {x.casefold(): x for x in KNOWN_ATTRS}
+_LAUNCH_TIME = int(time.time())
 
 
-@lru_cache(maxsize=1024)
-def case_normalize(attr):
-    """
-    Given a ClassAd attr name, check to see if it's known. If so, normalize the
-    attr name's casing to the known value. Otherwise, make the key lowercase.
-    (Elasticsearch field names are case-sensitive.)
-    """
-    if attr in KNOWN_ATTRS:
-        return attr
+class ClassAdConverter():
 
-    lower_attr = attr.casefold()
-    if lower_attr in KNOWN_ATTRS_MAP:
-        return KNOWN_ATTRS_MAP[lower_attr]
-
-    # Do simple checks for auto attrs before resorting to regexp
-    if attr[-4:] == "Date":
-        match = AUTO_ATTRS["date_attrs"].match(attr)
-        if match:
-            return "".join([x.capitalize() for x in match.groups()])
-    elif attr[-11:] == "Provisioned":
-        match = AUTO_ATTRS["provisioned_attrs"].match(attr)
-        if match:
-            return "".join([x.capitalize() for x in match.groups()])
-
-    if attr[:7] == "Request":
-        match = AUTO_ATTRS["resource_request_attrs"].match(attr)
-        if match:
-            return "".join([x.capitalize() for x in match.groups()])
-    elif (lower_attr[:4] == "want" or lower_attr[:3] == "has" or lower_attr[:2] == "is"):
-        match = AUTO_ATTRS["target_boolean_attrs"].match(attr)
-        if match:
-            return "".join([x.capitalize() for x in match.groups()])
-
-    # Unknown attr
-    return lower_attr
-
-
-def bulk_convert_ad_data(ad, result):
-    """
-    Given a ClassAd, bulk convert to a python dictionary.
-    """
-    keys = set(ad.keys())
-    for key in keys:
-        key = case_normalize(key)
-
-        # Do not return ignored attrs
-        if key in IGNORE_ATTRS:
-            continue
-
-        # Do not return invalid expressions
-        try:
-            value = ad.eval(key)
-        except Exception:
-            continue
-
-        if isinstance(value, classad.Value):
-            if (value is classad.Value.Error) or (value is classad.Value.Undefined):
-                # Could not evaluate expression, store raw expression
-                value = str(ad.get(key))
-                key = f"{key}_EXPR"
-            else:
-                continue
-        elif key in TEXT_ATTRS or key in INDEXED_KEYWORD_ATTRS or key in NOINDEX_KEYWORD_ATTRS:
-            value = str(value)
-        elif key in FLOAT_ATTRS:
-            try:
-                value = float(value)
-            except ValueError:
-                logging.warning(
-                    f"Failed to convert key {key} with value {repr(value)} to float"
-                )
-                key = f"{key}_STRING"
-                value = str(value)
-        elif key in INT_ATTRS or key[-11:] == "Provisioned" or key[:7] == "Request":
-            try:
-                value = int(value)
-            except ValueError:
-                logging.warning(
-                    f"Failed to convert key {key} with value {repr(value)} to int"
-                )
-                key = f"{key}_STRING"
-                value = str(value)
-        elif key in BOOL_ATTRS or (key[:4] == "Want" or key[:3] == "Has" or key[:2] == "Is"):
-            try:
-                value = bool(value)
-            except ValueError:
-                logging.warning(
-                    f"Failed to convert key {key} with value {repr(value)} to bool"
-                )
-                key = f"{key}_STRING"
-                value = str(value)
-        elif key in DATE_ATTRS or key[-4:] == "Date":
-            try:
-                value = int(value)
-                if value == 0:
-                    continue
-            except ValueError:
-                logging.warning(
-                    f"Failed to convert key {key} with value {repr(value)} to int for a date field"
-                )
-                key = f"{key}_STRING"
-                value = str(value)
-        elif key in NESTED_ATTRS:
-            try:
-                value = dict(value)
-            except ValueError:
-                logging.warning(
-                    f"Failed to convert {key} with value {json.dumps(value)} to dict for a nested field"
-                )
-                key = f"{key}_STRING"
-                value = json.dumps(value)
+    def __init__(
+            self,
+            mapping={},
+            projection=set(),
+            ignored_attrs=set(),
+            required_attrs=REQUIRED_ATTRS,
+            timestamp_attrs=TIMESTAMP_ATTRS,
+            doc_id_attrs=DOC_ID_ATTRS,
+            ):
+        self.mapping = mapping
+        self.ignored_attrs = ignored_attrs
+        self.timestamp_attrs = timestamp_attrs
+        self.doc_id_attrs = doc_id_attrs
+        if len(projection) > 0:
+            self.projection = {attr.lower() for attr in projection | required_attrs}
         else:
-            value = str(value)
+            self.projection = None
+        self.known_field_types = self.get_known_field_types(self.mapping)
+        self.dynamic_templates_matchers = self.get_dynamic_template_matchers(self.mapping)
 
-        # truncate strings longer than 256 characters
-        if isinstance(value, str) and len(value) > 256:
-            value = f"{value[:253]}..."
+    def get_known_field_types(self, mapping, parent_field_names=[]):
+        '''
+        Build up a map of sets of known field names and types,
+        keyed on the lowercased attribute names. For example,
+        if "lastremotewallclocktime" and "LastRemoteWallClockTime"
+        are both defined in the mapping as keyword and long,
+        respectively, the map should include:
+        {
+            ...
+            "lastremotewallclocktime": {
+                ("lastremotewallclocktime": str),
+                ("LastRemoteWallClockTime": int),
+            }
+            ...
+        }
 
-        result[key] = value
+        Also flatten any objects' subproperty names, e.g.:
+        {
+            ...
+            "numholdsbyreason.failedtocheckpoint": {
+                ("NumHoldsByReason.FailedToCheckpoint": int),
+            }
+            ...
+        }
+        '''
+        known_field_types = defaultdict(set)
+        for base_field_name, field_properties in mapping["properties"].items():
+            field_name_heirarchy = parent_field_names + [base_field_name]
+            flattened_field_name = ".".join(field_name_heirarchy)
+            if self.projection is not None and flattened_field_name.lower() not in self.projection:
+                continue
+            field_type = FIELD_TYPE_MAP[field_properties.get("type", "object")]
+            known_field_types[flattened_field_name.lower()].add((flattened_field_name, field_type,))
+            if field_type == "object" and "properties" in field_properties:
+                known_field_types = known_field_types | self.get_known_field_types(field_properties, field_name_heirarchy)
+        return known_field_types
+
+    def get_dynamic_template_matchers(self, mapping):
+        matchers = OrderedDict()
+        for dt_name, dt in mapping.get("dynamic_templates", {}).items():
+            match_type = "wildcard"
+            match_pattern = dt.get("match", "")
+            if dt.get("match_pattern") == "regex":
+                match_type = "regex"
+                match_pattern = re.compile(dt.get("match", r"^$"))
+            elif dt_name == "DEFAULT":
+                match_type = "default"
+                match_pattern = ""
+            matchers[dt_name] = {
+                "match_type": match_type,
+                "match_pattern": match_pattern,
+                "field_type": FIELD_TYPE_MAP[dt.get("mapping", {}).get("type", "keyword")],
+            }
+        return matchers
+
+    @lru_cache(maxsize=2048)
+    def map_unknown_field_type(self, attr):
+        '''
+        Test to see if attr fits any dynamic templates,
+        otherwise fall back to whatever the "DEFAULT"
+        dynamic template is. Always return the *first*
+        match (if any).
+        '''
+        field_name = attr.lower()  # fallback to lowercase attr name if no match
+        field_type = self.dynamic_templates_matchers["DEFAULT"]["field_type"]
+        for dt_name, dt in self.dynamic_templates_matchers.items():
+            if dt["match_type"] == "regex" and dt["match_pattern"].match(attr):
+                field_name = attr
+                field_type = dt["field_type"]
+                logging.info(f"Attr {attr} matched dynamic template {dt_name}")
+                break
+            if dt["match_type"] == "wildcard":
+                left, right = dt["match_pattern"].split("*", maxsplit=1)
+                if attr.startswith(left) and attr.endswith(right):
+                    field_name = attr
+                    field_type = dt["field_type"]
+                    logging.info(f"Attr {attr} matched dynamic template {dt_name}")
+                    break
+        return field_name, field_type
+
+    @lru_cache(maxsize=2048)
+    def warn_once(self, msg):
+        '''
+        Only print the same warning once every 2048 instances.
+        '''
+        logging.warning(msg)
+
+    def convert_attr_to_dict(self, attr, value):
+        doc = {}
+
+        # 1. Get the field name and field type mappings if known
+        known_mappings = True
+        field_names_types = dict(self.known_field_types[attr.lower()])
+
+        # 2. Get the field name and field type mappings if unknown
+        if not field_names_types:
+            known_mappings = False
+            field_names_types = dict([self.map_unknown_field_type(attr)])
+
+        # 3. Map attr to all matching fields
+        for field_name, field_type in field_names_types.items():
+
+            field_value = None
+
+            # 4. Handle objects separately
+            if isinstance(value, (dict, classad.ClassAd)):
+
+                # Make sure the mapping is expected
+                if known_mappings and field_type is not dict:
+                    self.warn_once(f"Could not convert {field_name} to {field_type}, got a dict-like")
+                    continue
+
+                # If we know this to be a string, try to make it a JSON blob
+                if known_mappings and field_type is str:
+                    if isinstance(value, classad.ClassAd):
+                        try:
+                            field_value = value.printJson()
+                        except Exception:
+                            self.warn_once(f"Failed to convert ClassAd object in {attr} to JSON")
+                            continue
+                    else:
+                        try:
+                            field_value = json.dumps(value)
+                        except Exception:
+                            self.warn_once(f"Failed to convert dict-like object in {attr} to JSON")
+                            continue
+
+                else:  # Otherwise recursively convert it, flattening the namespace
+                    if not known_mappings:  # Preserve original case if we don't know what this is
+                        field_name = attr  # because it might match a dynamic template later.
+                    doc.update(self.convert_ad_to_dict(value, field_name))
+                    continue  # Then at this point, this mapping is already done
+
+            # 5. Handle everything else
+            else:
+
+                # Evaluate any ClassAd expressions
+                if isinstance(value, classad.ExprTree):
+                    try:
+                        eval_value = value.eval()
+                    except Exception:
+                        self.warn_once(f"Failed to ClassAd eval {attr}")
+                        eval_value = classad.Value.Error
+
+                    # If eval doesn't work, store the expr as a string if possible
+                    if eval_value in {classad.Value.Undefined, classad.Value.Error}:
+                        field_name = f"{field_name}_EXPR"
+                        field_type = str
+                        try:
+                            field_value = field_type(value)
+                        except Exception:
+                            self.warn_once(f"Failed to get string repr of expr in {attr}")
+                            continue
+
+                try:
+                    field_value = field_type(value)
+                except Exception:
+                    self.warn_once(f"Failed to cast {attr} as a {field_type.__name__}")
+
+            if field_value is None:  # Somehow we didn't get a value? This shouldn't happen.
+                self.warn_once(f"Failed to get a value for {attr}")
+                continue
+
+            # 6. Truncate strings if necessary
+            if isinstance(field_value, str) and len(field_value) > MAX_KEYWORD_LEN:
+                field_value = f"{field_value[:MAX_KEYWORD_LEN-3]}..."
+
+            # 7. Store value
+            doc[field_name] = field_value
+
+        return doc
+
+    def convert_ad_to_dict(self, ad, parent_attr=""):
+        doc = {}
+
+        # 1. Loop over all attrs
+        for attr, value in ad.items():
+
+            # 2. Flatten the namespace
+            if parent_attr:
+                attr = f"{parent_attr}.{attr}"
+
+            # 3. Skip any ignored attrs
+            if attr in self.ignored_attrs:
+                continue
+
+            # 4. Skip any attrs not in the projection
+            if self.projection is not None and attr.lower() not in self.projection:
+                continue
+
+            # 5. Convert attr
+            doc.update(self.convert_attr_to_dict(attr, value))
+
+        return doc
+
+    def get_timestamp(self, ad, fallback_to_launch=True):
+        for timestamp_attr in self.timestamp_attrs:
+            if ad.get(timestamp_attr, 0) > 0:
+                return ad[timestamp_attr]
+
+        if fallback_to_launch:
+            self.warn_once(f"Could not find valid value for any timestamp attr ({', '.join(self.timestamp_attrs)}), falling back to adstash launch date")
+            return _LAUNCH_TIME
+
+        self.warn_once(f"Could not find valid value for any timestamp attr ({', '.join(self.timestamp_attrs)}), timestamp will be 0!")
+        return 0
+
+    def get_unique_doc_id(self, ad):
+        """
+        Return a string to uniquely identify documents
+        """
+        doc_id_list = [v for v in [ad.get(attr) for attr in self.doc_id_attrs] if v is not None]
+        return "#".join(doc_id_list)
+
+    def convert_ad_to_doc(self, ad, decorate_job_ad=True):
+        if ad.get("TaskType") == "ROOT":
+            return None
+
+        # Do the bulk of the conversions
+        doc = self.convert_ad_to_dict(ad)
+
+        # Add timestamps
+        doc["@timestamp"] = doc["RecordTime"] = self.get_timestamp(ad)
+
+        # Add decorations (only useful for job ads)
+        if decorate_job_ad:
+            doc["ScheddName"] = ad.get("GlobalJobId", "UNKNOWN").split("#")[0]
+            doc["StartdSlot"] = ad.get("RemoteHost", ad.get("LastRemoteHost", "UNKNOWN@UNKNOWN")).split("@")[0]
+            doc["StartdName"] = ad.get("RemoteHost", ad.get("LastRemoteHost", "UNKNOWN@UNKNOWN")).split("@")[-1]
+            doc["Status"] = STATUS.get(ad.get("JobStatus"), "Unknown")
+            doc["Universe"] = UNIVERSE.get(ad.get("JobUniverse"), "Unknown")
+
+        return doc
 
 
-def unique_doc_id(doc):
-    """
-    Return a string of format "<GlobalJobId>#<RecordTime>"
-    To uniquely identify documents (not jobs)
-
-    Note that this uniqueness breaks if the same jobs are submitted
-    with the same RecordTime
-    """
-    return f"{doc['GlobalJobId']}#{doc['RecordTime']}"
+if __name__ == "__main__":
+    from mapping import get_default_mapping_properties, DYNAMIC_TEMPLATES
+    mappings = {
+        "dynamic_templates": DYNAMIC_TEMPLATES,
+        "properties": get_default_mapping_properties(),
+        "date_detection": False,
+        "numeric_detection": False,
+    }
+    converter = ClassAdConverter(mappings)
