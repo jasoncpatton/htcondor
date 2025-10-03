@@ -29,7 +29,7 @@ import htcondor2 as htcondor
 
 # adstash library in libexec
 sys.path.append(htcondor.param.get('libexec', '/usr/libexec/condor'))
-from adstash.adstash import adstash
+from adstash.main import adstash
 from adstash.utils import set_up_logging
 from adstash.config import get_config
 

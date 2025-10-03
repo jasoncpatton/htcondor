@@ -21,7 +21,7 @@ import logging
 from functools import lru_cache
 from collections import defaultdict, OrderedDict
 
-from mapping import MAX_KEYWORD_LEN, REQUIRED_ATTRS, TIMESTAMP_ATTRS, DOC_ID_ATTRS
+from adstash.mapping import MAX_KEYWORD_LEN, IGNORE_ATTRS, REQUIRED_ATTRS, TIMESTAMP_ATTRS, DOC_ID_ATTRS
 
 import classad2 as classad
 
@@ -51,19 +51,36 @@ UNIVERSE = {
     12: "Local",
 }
 
+
+_LAUNCH_TIME = int(time.time())
+
+
+def strict_bool(i):
+    if isinstance(i, bool):
+        return bool(i)
+    if isinstance(i, str):
+        if str(i).lower() in {"1", "t", "true"}:
+            return True
+        if str(i).lower() in {"0", "f", "false"}:
+            return False
+    if isinstance(i, (int, float)):
+        if abs(i - 1) < 1e-8:  # allow for some tiny error
+            return True
+        if abs(i) < 1e-8:
+            return False
+    raise ValueError(f"The truth value of {i} is ambiguous")
+
+
 FIELD_TYPE_MAP = {
     "text": str,
     "keyword": str,
     "double": float,
     "long": int,
     "date": int,
-    "boolean": bool,
+    "boolean": strict_bool,
     "object": dict,
     "nested": list,
 }
-
-
-_LAUNCH_TIME = int(time.time())
 
 
 class ClassAdConverter():
@@ -72,13 +89,13 @@ class ClassAdConverter():
             self,
             mapping={},
             projection=set(),
-            ignored_attrs=set(),
+            ignore_attrs=IGNORE_ATTRS,
             required_attrs=REQUIRED_ATTRS,
             timestamp_attrs=TIMESTAMP_ATTRS,
             doc_id_attrs=DOC_ID_ATTRS,
             ):
         self.mapping = mapping
-        self.ignored_attrs = ignored_attrs
+        self.ignore_attrs = ignore_attrs
         self.timestamp_attrs = timestamp_attrs
         self.doc_id_attrs = doc_id_attrs
         if len(projection) > 0:
@@ -121,7 +138,7 @@ class ClassAdConverter():
                 continue
             field_type = FIELD_TYPE_MAP[field_properties.get("type", "object")]
             known_field_types[flattened_field_name.lower()].add((flattened_field_name, field_type,))
-            if field_type == "object" and "properties" in field_properties:
+            if field_type is dict and "properties" in field_properties:
                 known_field_types = known_field_types | self.get_known_field_types(field_properties, field_name_heirarchy)
         return known_field_types
 
@@ -175,7 +192,7 @@ class ClassAdConverter():
         '''
         logging.warning(msg)
 
-    def convert_attr_to_dict(self, attr, value):
+    def convert_attr_to_dict(self, attr, value, full_ad):
         doc = {}
 
         # 1. Get the field name and field type mappings if known
@@ -184,6 +201,7 @@ class ClassAdConverter():
 
         # 2. Get the field name and field type mappings if unknown
         if not field_names_types:
+            self.warn_once(f"Looking up {attr}")
             known_mappings = False
             field_names_types = dict([self.map_unknown_field_type(attr)])
 
@@ -225,15 +243,19 @@ class ClassAdConverter():
             else:
 
                 # Evaluate any ClassAd expressions
+                # (in the context of their ad if possible)
                 if isinstance(value, classad.ExprTree):
                     try:
-                        eval_value = value.eval()
+                        if isinstance(full_ad, classad.ClassAd):
+                            eval_value = value.eval(full_ad)
+                        else:
+                            eval_value = value.eval()
                     except Exception:
                         self.warn_once(f"Failed to ClassAd eval {attr}")
                         eval_value = classad.Value.Error
 
                     # If eval doesn't work, store the expr as a string if possible
-                    if eval_value in {classad.Value.Undefined, classad.Value.Error}:
+                    if isinstance(eval_value, (classad.Value, classad.ExprTree)):
                         field_name = f"{field_name}_EXPR"
                         field_type = str
                         try:
@@ -241,11 +263,21 @@ class ClassAdConverter():
                         except Exception:
                             self.warn_once(f"Failed to get string repr of expr in {attr}")
                             continue
+                    else:
+                        value = eval_value
+
+                # Prevent Error or Undefined ClassAd values from getting through,
+                # for example, classad.Value.Undefined acts a literal 2 for
+                # any type casting done on it, which we don't want.
+                if isinstance(value, classad.Value):
+                    self.warn_once(f"Got ClassAd value {value.name} for {attr}")
+                    continue
 
                 try:
                     field_value = field_type(value)
                 except Exception:
-                    self.warn_once(f"Failed to cast {attr} as a {field_type.__name__}")
+                    self.warn_once(f"Failed to cast {attr} = {value} as a {field_type.__name__}")
+                    continue
 
             if field_value is None:  # Somehow we didn't get a value? This shouldn't happen.
                 self.warn_once(f"Failed to get a value for {attr}")
@@ -271,7 +303,7 @@ class ClassAdConverter():
                 attr = f"{parent_attr}.{attr}"
 
             # 3. Skip any ignored attrs
-            if attr in self.ignored_attrs:
+            if attr in self.ignore_attrs:
                 continue
 
             # 4. Skip any attrs not in the projection
@@ -279,7 +311,7 @@ class ClassAdConverter():
                 continue
 
             # 5. Convert attr
-            doc.update(self.convert_attr_to_dict(attr, value))
+            doc.update(self.convert_attr_to_dict(attr, value, ad))
 
         return doc
 
@@ -324,10 +356,14 @@ class ClassAdConverter():
 
 
 if __name__ == "__main__":
-    from mapping import get_default_mapping_properties, DYNAMIC_TEMPLATES
+
+    from adstash.mapping import get_default_mapping_properties
+    from adstash.mapping import merge_properties
+    from adstash.mapping import METADATA_MAPPING, DYNAMIC_TEMPLATES
+
     mappings = {
         "dynamic_templates": DYNAMIC_TEMPLATES,
-        "properties": get_default_mapping_properties(),
+        "properties": merge_properties(get_default_mapping_properties(), METADATA_MAPPING),
         "date_detection": False,
         "numeric_detection": False,
     }
