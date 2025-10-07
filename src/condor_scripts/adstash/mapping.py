@@ -82,6 +82,7 @@ NON_INDEXED_TEXT_ATTRS = {
     "JobMachineAttrs",
     "JobMaterializeDigestFile",
     "JobMaterializeItemsFile",
+    "JobStarterLog",
     "LastHoldReason",
     "LastRejMatchReason",
     "LastReleaseReason",
@@ -91,6 +92,8 @@ NON_INDEXED_TEXT_ATTRS = {
     "NotifyUser",
     "OnExitHoldReason",
     "OnExitRemoveReason",
+    "OriginalOut",
+    "OSHomeDir",
     "OtherJobRemoveRequirements",
     "Out",
     "OutputDestination",
@@ -104,6 +107,7 @@ NON_INDEXED_TEXT_ATTRS = {
     "ReleaseReason",
     "RemoteIwd",
     "RemoveReason",
+    "RequeueReason",
     "Requirements",
     "RootDir",
     "StartdIpAddr",
@@ -143,12 +147,18 @@ INDEXED_KEYWORD_ATTRS = {
     "CondorVersion",
     "ContainerImage",
     "ContainerImageSource",
+    "CronDayOfMonth",
+    "CronDayOfWeek",
+    "CronHour",
+    "CronMinute",
+    "CronMonth",
     "CUDAVersion",
     "DAGNodeName",
     "DAGParentNodeNames",
     "DockerImage",
     "DockerNetworkType",
     "DockerPullPolicy",
+    "EpochAdType",
     "FileSystemDomain",
     "GlobalJobId",
     "GridJobId",
@@ -158,10 +168,12 @@ INDEXED_KEYWORD_ATTRS = {
     "JobBatchName",
     "JobDescription",
     "JobKeyword",
+    "JobStarterDebug",
     "JobState",
     "JobSubmitFile",
     "JobVMType",
     "KillSig",
+    "LastFileTransferErrorProtocol",
     "LastRejMatchNegotiator",
     "LastRemoteHost",
     "LastRemotePool",
@@ -171,6 +183,7 @@ INDEXED_KEYWORD_ATTRS = {
     "OAuthServicesNeeded",
     "OsUser",
     "Owner",
+    "PrimaryUnixGroup",
     "ProjectName",
     "ProvisionedResources",
     "RemoteHost",
@@ -265,7 +278,10 @@ INT_ATTRS = {
     "DAGMan_MaxPostScripts",
     "DAGMan_MaxPreScripts",
     "DAGManJobId",
+    "DAGManNodeRetry",
     "DataLocationsCount",
+    "DeferralPrepTime",
+    "DeferralWindow",
     "DiskProvisioned",
     "DiskUsage_RAW",
     "DiskUsage",
@@ -288,6 +304,7 @@ INT_ATTRS = {
     "IOWait",
     "JobCurrentReconnectAttempt",
     "JobLeaseDuration",
+    "JobMachineAttrsHistoryLength",
     "JobMaterializeLimit",
     "JobMaterializeMaxIdle",
     "JobMaterializeNextProcId",
@@ -299,6 +316,7 @@ INT_ATTRS = {
     "JobPrio",
     "JobRunCount",
     "JobStatus",
+    "JobStatusOnRelease",
     "JobSubmitMethod",
     "JobSuccessExitCode",
     "JobUniverse",
@@ -410,6 +428,7 @@ DATE_ATTRS = {
     "@timestamp",
     "CompletionDate",
     "DAG_AdUpdateTime",
+    "DeferralTime",
     "EnteredCurrentStatus",
     "EpochWriteDate",
     "FirstJobMatchDate",
@@ -422,6 +441,7 @@ DATE_ATTRS = {
     "JobCurrentStartTransferOutputDate",
     "JobDisconnectedDate",
     "JobFinishedHookDone",
+    "JobLastCheckpointTime",
     "JobLastStartDate",
     "JobLeaseExpiration",
     "JobMaterializeDate",
@@ -459,6 +479,7 @@ BOOL_ATTRS = {
     "BufferFiles",
     "CurrentStatusUnknown",
     "DAG_InRecovery",
+    "DAGLifetimeJob",
     "DataflowJobSkipped",
     "DockerOverrideEntrypoint",
     "EncryptExecuteDirectory",
@@ -469,6 +490,7 @@ BOOL_ATTRS = {
     "IsDaemonCore",
     "IsNoopJob",
     "JobCoreDumped",
+    "JobRequiresSandbox",
     "JobVMCheckpoint",
     "JobVMNetworking",
     "JobVMVNCConsole",
@@ -599,6 +621,7 @@ IGNORE_ATTRS = {
     "KeystoreFile",
     "KeystorePassphraseFile",
     "LastPublicClaimId",
+    "MyAddress",
     "orig_environment",
     "osg_environment",
     "PostArgs",
@@ -610,14 +633,18 @@ IGNORE_ATTRS = {
     "PreEnv",
     "PreEnvironment",
     "PublicClaimId",
+    "RunInstanceID",
     "ScitokensFile",
+    "ShadowIpAddr",
+    "ShadowVersion",
     "SpooledOutputFiles",
-    "x509userproxy",
+    "TransferSocket",
+    "UidDomain",
+    "x509UserProxy",
     "x509UserProxyEmail",
     "x509UserProxyExpiration",
     "x509UserProxyFirstFQAN",
     "x509UserProxyFQAN",
-    "x509userproxysubject",
     "x509UserProxySubject",
     "x509UserProxyVOName",
 }
@@ -665,7 +692,7 @@ DYNAMIC_TEMPLATES["target_bool_attrs"] = {  # Attrs starting with "Want", "Has",
 }
 DYNAMIC_TEMPLATES["DEFAULT"] = {  # DEFAULT MAPPING - will be evaluated last
     "match_mapping_type": "string",  # Store unknown attrs as indexed keywords
-    "mapping": {"type": "keyword", "ignore_above": MAX_KEYWORD_LEN},
+    "mapping": {"type": "keyword", "ignore_above": MAX_KEYWORD_LEN},  # https://www.elastic.co/guide/en/elasticsearch/reference/7.17/tune-for-disk-usage.html#default-dynamic-string-mapping
 }
 
 # The metadata object should always be added to the mapping last
@@ -700,15 +727,17 @@ def get_default_mapping_properties():
             [(field, {"type": "long"}) for field in INT_ATTRS] +
             [(field, {"type": "date", "format": "epoch_second"}) for field in DATE_ATTRS] +
             [(field, {"type": "boolean"}) for field in BOOL_ATTRS] +
-            [(field, {"type": "object"}) for field in OBJECT_ATTRS] +
-            [(field, {"type": "nested"}) for field in NESTED_ATTRS]
+            [(field, {"type": "object", "dynamic": True}) for field in OBJECT_ATTRS] +
+            [(field, {"type": "nested", "dynamic": True}) for field in NESTED_ATTRS]
     }
     return properties
 
 
 def get_ignore_attrs(custom_mappings={}, custom_ignore_attrs=set()):
-    # First, do not ignore any attrs that have been defined in the custom mappings
-    ignore_attrs = IGNORE_ATTRS - custom_mappings.get("properties", {}).keys()
+    # First, duplicate lowercase version of defaults
+    ignore_attrs = IGNORE_ATTRS | {attr.lower() for attr in IGNORE_ATTRS}
+    # Then, do not ignore any attrs that have been defined in the custom mappings
+    ignore_attrs = ignore_attrs - custom_mappings.get("properties", {}).keys()
     # Then, do ignore any attrs that have been specifically configured
     ignore_attrs = ignore_attrs | custom_ignore_attrs
     return ignore_attrs

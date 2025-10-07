@@ -21,7 +21,7 @@ import logging
 from functools import lru_cache
 from collections import defaultdict, OrderedDict
 
-from adstash.mapping import MAX_KEYWORD_LEN, IGNORE_ATTRS, REQUIRED_ATTRS, TIMESTAMP_ATTRS, DOC_ID_ATTRS
+from adstash.mapping import MAX_KEYWORD_LEN, REQUIRED_ATTRS, TIMESTAMP_ATTRS, DOC_ID_ATTRS, get_ignore_attrs
 
 import classad2 as classad
 
@@ -89,7 +89,7 @@ class ClassAdConverter():
             self,
             mapping={},
             projection=set(),
-            ignore_attrs=IGNORE_ATTRS,
+            ignore_attrs=get_ignore_attrs(),
             required_attrs=REQUIRED_ATTRS,
             timestamp_attrs=TIMESTAMP_ATTRS,
             doc_id_attrs=DOC_ID_ATTRS,
@@ -174,23 +174,25 @@ class ClassAdConverter():
             if dt["match_type"] == "regex" and dt["match_pattern"].match(attr):
                 field_name = attr
                 field_type = dt["field_type"]
-                logging.info(f"Attr {attr} matched dynamic template {dt_name}")
+                self.log_once(f"Attr {attr} matched dynamic template {dt_name}", logging.info)
                 break
             if dt["match_type"] == "wildcard":
                 left, right = dt["match_pattern"].split("*", maxsplit=1)
                 if attr.startswith(left) and attr.endswith(right):
                     field_name = attr
                     field_type = dt["field_type"]
-                    logging.info(f"Attr {attr} matched dynamic template {dt_name}")
+                    self.log_once(f"Attr {attr} matched dynamic template {dt_name}", logging.info)
                     break
+        else:
+            self.log_once(f"Encountered new/unknown attr {attr}")
         return field_name, field_type
 
     @lru_cache(maxsize=2048)
-    def warn_once(self, msg):
+    def log_once(self, msg, handle=logging.warning):
         '''
         Only print the same warning once every 2048 instances.
         '''
-        logging.warning(msg)
+        handle(msg)
 
     def convert_attr_to_dict(self, attr, value, full_ad):
         doc = {}
@@ -201,7 +203,6 @@ class ClassAdConverter():
 
         # 2. Get the field name and field type mappings if unknown
         if not field_names_types:
-            self.warn_once(f"Looking up {attr}")
             known_mappings = False
             field_names_types = dict([self.map_unknown_field_type(attr)])
 
@@ -215,7 +216,7 @@ class ClassAdConverter():
 
                 # Make sure the mapping is expected
                 if known_mappings and field_type is not dict:
-                    self.warn_once(f"Could not convert {field_name} to {field_type}, got a dict-like")
+                    self.log_once(f"Could not convert {field_name} to {field_type}, got a dict-like")
                     continue
 
                 # If we know this to be a string, try to make it a JSON blob
@@ -224,13 +225,13 @@ class ClassAdConverter():
                         try:
                             field_value = value.printJson()
                         except Exception:
-                            self.warn_once(f"Failed to convert ClassAd object in {attr} to JSON")
+                            self.log_once(f"Failed to convert ClassAd object in {attr} to JSON")
                             continue
                     else:
                         try:
                             field_value = json.dumps(value)
                         except Exception:
-                            self.warn_once(f"Failed to convert dict-like object in {attr} to JSON")
+                            self.log_once(f"Failed to convert dict-like object in {attr} to JSON")
                             continue
 
                 else:  # Otherwise recursively convert it, flattening the namespace
@@ -251,7 +252,7 @@ class ClassAdConverter():
                         else:
                             eval_value = value.eval()
                     except Exception:
-                        self.warn_once(f"Failed to ClassAd eval {attr}")
+                        self.log_once(f"Failed to evaluate {attr} in the context of its ClassAd")
                         eval_value = classad.Value.Error
 
                     # If eval doesn't work, store the expr as a string if possible
@@ -261,7 +262,7 @@ class ClassAdConverter():
                         try:
                             field_value = field_type(value)
                         except Exception:
-                            self.warn_once(f"Failed to get string repr of expr in {attr}")
+                            self.log_once(f"Failed to get string repr of expr in {attr}")
                             continue
                     else:
                         value = eval_value
@@ -270,21 +271,22 @@ class ClassAdConverter():
                 # for example, classad.Value.Undefined acts a literal 2 for
                 # any type casting done on it, which we don't want.
                 if isinstance(value, classad.Value):
-                    self.warn_once(f"Got ClassAd value {value.name} for {attr}")
+                    self.log_once(f"Got ClassAd value {value.name} for {attr}", logging.info)
                     continue
 
                 try:
                     field_value = field_type(value)
                 except Exception:
-                    self.warn_once(f"Failed to cast {attr} = {value} as a {field_type.__name__}")
+                    self.log_once(f"Failed to cast {attr} = {value} as a {field_type.__name__}")
                     continue
 
             if field_value is None:  # Somehow we didn't get a value? This shouldn't happen.
-                self.warn_once(f"Failed to get a value for {attr}")
+                self.log_once(f"Failed to get a usable value for {attr}", logging.error)
                 continue
 
             # 6. Truncate strings if necessary
             if isinstance(field_value, str) and len(field_value) > MAX_KEYWORD_LEN:
+                self.log_once(f"Had to truncate value of {field_name} (original length {len(field_value)})")
                 field_value = f"{field_value[:MAX_KEYWORD_LEN-3]}..."
 
             # 7. Store value
