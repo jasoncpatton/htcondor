@@ -16,6 +16,7 @@
 import os
 import re
 import sys
+import json
 import logging
 import argparse
 
@@ -55,6 +56,11 @@ def get_default_config(name="ADSTASH"):
         "se_index_name": "htcondor-000001",
         "se_log_mappings": True,
         "json_dir": Path.cwd(),
+        "custom_field_properties": {},
+        "custom_dynamic_templates": {},
+        "custom_ignore_attrs": set(),
+        "custom_index_settings": {},
+        "init_index": False,
     }
     return defaults
 
@@ -95,6 +101,10 @@ def get_htcondor_config(name="ADSTASH"):
         "se_ca_certs": p.get(f"{name}_ES_CA_CERTS", p.get(f"{name}_SE_CA_CERTS")),
         "se_log_mappings": p.get(f"{name}_SE_LOG_MAPPINGS"),
         "json_dir": p.get(f"{name}_JSON_DIR"),
+        "custom_field_properties": p.get(f"{name}_CUSTOM_FIELD_PROPERTIES"),
+        "custom_dynamic_templates": p.get(f"{name}_CUSTOM_DYNAMIC_TEMPLATES"),
+        "custom_ignore_attrs": p.get(f"{name}_CUSTOM_IGNORE_ATTRS"),
+        "custom_index_settings": p.get(f"{name}_CUSTOM_INDEX_SETTINGS"),
     }
 
     # Convert debug level
@@ -164,6 +174,10 @@ def get_environment_config(name="ADSTASH"):
         "se_ca_certs": env.get(f"{name}_SE_CA_CERTS", env.get(f"{name}_CA_CERTS")),
         "se_log_mappings": env.get(f"{name}_SE_LOG_MAPPINGS"),
         "json_dir": env.get(f"{name}_JSON_DIR"),
+        "custom_field_properties": env.get(f"{name}_CUSTOM_FIELD_PROPERTIES"),
+        "custom_dynamic_templates": env.get(f"{name}_CUSTOM_DYNAMIC_TEMPLATES"),
+        "custom_ignore_attrs": env.get(f"{name}_CUSTOM_IGNORE_ATTRS"),
+        "custom_index_settings": env.get(f"{name}_CUSTOM_INDEX_SETTINGS"),
     }
 
     # remove None values
@@ -580,6 +594,67 @@ def get_config(argv=None):
         help="Directory to store JSON files, which are named by timestamp [defaults to current directory]",
     )
 
+    field_settings_group = parser.add_argument_group(
+        title = "Field mapping and index setting customization options",
+        description = "Override or add additional field mappings and index settings."
+    )
+    field_settings_group.add_argument(
+        "--custom_field_properties",
+        type=Path,
+        metavar="PATH",
+        help="Path to JSON file containing field properties",
+    )
+    field_settings_group.add_argument(
+        "--custom_dynamic_templates",
+        type=Path,
+        metavar="PATH",
+        help="Path to JSON file containing dynamic templates",
+    )
+    field_settings_group.add_argument(
+        "--custom_ignore_attrs",
+        help="Comma-separated list of ClassAd attributes to ignore",
+    )
+    field_settings_group.add_argument(
+        "--custom_index_settings",
+        type=Path,
+        metavar="PATH",
+        help="Path to JSON file containing index settings",
+    )
+
+    init_index_group = parser.add_argument_group(
+        title = "Index initialization options",
+        description = "Write out JSON files (with reasonable defaults) for when first setting up condor_adstash."
+    )
+    init_index_group.add_argument(
+        "--init_index",
+        action="store_true",
+        help="Write out JSON files to set up a new index for your search engine then exit."
+    )
+    init_index_group.add_argument(
+        "--init_output_directory",
+        type=Path,
+        default=Path().cwd(),
+        help="Directory to write index JSON and README files [default is current working dir: %(default)s]",
+    )
+    init_index_group.add_argument(
+        "--no_alias",
+        dest="use_alias",
+        action="store_false",
+        help="Do not use index aliases (not recommended)",
+    )
+    init_index_group.add_argument(
+        "--no_ilm",
+        dest="use_ilm",
+        action="store_false",
+        help="Do not use an index lifecycle management policy (not recommended)",
+    )
+    init_index_group.add_argument(
+        "--no_template",
+        dest="use_template",
+        action="store_false",
+        help="Do not use an index template (not recommended)",
+    )
+
     # Parse args and add process name back to the list
     args = parser.parse_args(remaining_argv)
     args_dict = vars(args)
@@ -589,6 +664,22 @@ def get_config(argv=None):
         args.schedd_history_projection = set(re.split(r"[\s,]+", args.schedd_history_projection.strip()))
     if args.startd_history_projection:
         args.startd_history_projection = set(re.split(r"[\s,]+", args.startd_history_projection.strip()))
+    if args.custom_ignore_attrs:
+        args.custom_ignore_attrs = set(re.split(r"[\s,]+", args.custom_ignore_attrs.strip()))
+
+    # Read JSON files
+    for arg in ["custom_field_properties", "custom_dynamic_templates", "custom_ignore_attrs", "custom_index_settings"]:
+        if arg in args_dict and args_dict[arg] is not None:
+            try:
+                with args_dict[arg].open("r") as f:
+                    try:
+                        args_dict[arg] = json.load(f)
+                    except json.JSONDecodeError:
+                        logging.exception(f"Could not parse JSON from {args_dict[arg]}, exiting")
+                        sys.exit(1)
+            except Exception:
+                logging.exception(f"Could not open {args_dict[arg]}, exiting")
+                sys.exit(2)
 
     # Check for deprecated args
     for arg in remaining_argv:

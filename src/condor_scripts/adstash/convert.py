@@ -1,4 +1,4 @@
-# Copyright 2021 HTCondor Team, Computer Sciences Department,
+# Copyright 2025 HTCondor Team, Computer Sciences Department,
 # University of Wisconsin-Madison, WI.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -323,10 +323,10 @@ class ClassAdConverter():
                 return ad[timestamp_attr]
 
         if fallback_to_launch:
-            self.warn_once(f"Could not find valid value for any timestamp attr ({', '.join(self.timestamp_attrs)}), falling back to adstash launch date")
+            self.log_once(f"Could not find valid value for any timestamp attr ({', '.join(self.timestamp_attrs)}), falling back to adstash launch date")
             return _LAUNCH_TIME
 
-        self.warn_once(f"Could not find valid value for any timestamp attr ({', '.join(self.timestamp_attrs)}), timestamp will be 0!")
+        self.log_once(f"Could not find valid value for any timestamp attr ({', '.join(self.timestamp_attrs)}), timestamp will be 0!")
         return 0
 
     def get_unique_doc_id(self, ad):

@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
+
 from collections import OrderedDict
 
 # MAX_KEYWORD_LEN is the value used for ignore_above
@@ -743,28 +745,46 @@ def get_ignore_attrs(custom_mappings={}, custom_ignore_attrs=set()):
     return ignore_attrs
 
 
-# Merging properties is more complicated than just updating
-# some dictionary because sub-object properties can be
-# embedded sub-dictionaries deep.
+def flatten_mapping_properties(properties, parent=""):
+    flattened_properties = {}
+    for k, v in properties.items():
+        if parent:
+            k = f"{parent}.{k}"
+        if "properties" in v:
+            flattened_properties.update(flatten_mapping_properties(v.pop("properties"), k))
+        flattened_properties[k] = v
+    return flattened_properties
+
+
+# Merging will add subfields where possible when there are conflicts.
 # Ideally, this function's arguments are in order of:
-# 1. Default properties
+# 1. Existing properties (since existing mappings cannot be mutated)
 # 2. Custom properties
-# 3. Existing properties (since existing mappings cannot be mutated)
+# 3. Default properties
 def merge_properties(*properties_in):
     if len(properties_in) < 2:
         raise ValueError("merge_proprties requires at least two dicts")
-    if not isinstance(properties_in[0], dict):
-        if len(properties_in[1:]) > 1:
-            return merge_properties(*properties_in[1:])
-        return properties_in[1].copy()
     properties_out = {}
-    properties_out.update(properties_in[0])
+    flattened_properties_in = flatten_mapping_properties(properties_in[0])
+    properties_out.update(flattened_properties_in)
     for property_in in properties_in[1:]:
-        for k, v in property_in.items():
-            if (k not in properties_out) or (not isinstance(v, dict)):
-                properties_out[k] = v
+        flattened_properties_in = flatten_mapping_properties(property_in)
+        for k, v in flattened_properties_in.items():
+            # check for conflict
+            if k in properties_out and v.get("type", "object") != properties_out[k].get("type", "object") and v.get("type", "object") not in {"object", "nested"}:
+                # check for existing subfield definitions
+                if "fields" in properties_out[k]:
+                    # ignore if this subfield already exists
+                    if v["type"] in properties_out[k]["fields"]:
+                        continue
+                    properties_out[k]["fields"][v]["type"] = v
+                else:
+                    properties_out[k]["fields"] = {v["type"]: v}
+            # can't do subfields with object and nested types
+            elif k in properties_out and v.get("type", "object") != properties_out[k].get("type", "object") and v.get("type", "object") in {"object", "nested"}:
+                logging.error(f"Could not set field {k} to type {v['type']}, field is already set to {properties_out[k].get('type')}")
             else:
-                properties_out[k].update(merge_properties(properties_out.get(k, {}), v))
+                properties_out[k] = v
     return properties_out
 
 
@@ -788,16 +808,15 @@ def merge_dynamic_templates(default_dts, custom_dts):
 
 
 # This will estimate the number of fields based on the
-# explicit mapping properties defined. Some of these
-# mappings may be nested, so need to recurse on every
-# mapping.
-def count_total_fields(mapping, init=True):
-    count = int(not init)
-    if not (isinstance(mapping, dict) and "properties" in mapping):
-        return 1
-    properties = mapping["properties"]
-    for _, property in properties.items():
-        count += count_total_fields(property, init=False)
+# explicit mapping properties defined, including subfield
+# mappings.
+def count_total_fields(mapping):
+    count = 0
+    flattened_properties = flatten_mapping_properties(mapping["properties"])
+    for property in flattened_properties.values():
+        count += 1
+        if "fields" in property:
+            count += len(property["fields"])
     return count
 
 
@@ -806,6 +825,7 @@ if __name__ == "__main__":
         "TestProjectName": {"type": "keyword"},
         "DAG_Stats": {"type": "object", "dynamic": "false", "properties": {"NumJobs": {"type": "long"}}},
         "VeryNestedA": {"type": "object", "properties": {"VeryNestedB": {"type": "object", "properties": {"VeryNestedC": {"type": "boolean"}}}}},
+        "WantSIF": {"type": "long"},
     }
     test_custom_dynamic_templates = OrderedDict([
         ("target_test_id_attrs", {
@@ -818,7 +838,13 @@ if __name__ == "__main__":
         })
     ])
 
-    properties = merge_properties(get_default_mapping_properties(), test_custom_mapping_properties, METADATA_MAPPING)
+    import json
+    from pathlib import Path
+    existing_mappings = {}
+    if Path("existing_mappings.json").exists():
+        existing_mappings = json.load(Path("existing_mappings.json").open())
+
+    properties = merge_properties(existing_mappings["properties"], METADATA_MAPPING, test_custom_mapping_properties, get_default_mapping_properties())
 
     mappings = {
         "dynamic_templates": merge_dynamic_templates(DYNAMIC_TEMPLATES, test_custom_dynamic_templates),
