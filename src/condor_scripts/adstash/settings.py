@@ -18,7 +18,7 @@ import json
 
 from pathlib import Path
 
-from adstash.mapping import count_total_fields
+from adstash.mapping.functions import count_total_fields
 
 DEFAULT_SETTINGS = {
     "index": {

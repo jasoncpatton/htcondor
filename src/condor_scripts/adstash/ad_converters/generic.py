@@ -21,35 +21,10 @@ import logging
 from functools import lru_cache
 from collections import defaultdict, OrderedDict
 
-from adstash.mapping import MAX_KEYWORD_LEN, REQUIRED_ATTRS, TIMESTAMP_ATTRS, DOC_ID_ATTRS, get_ignore_attrs
+from adstash.mapping.common import MAX_KEYWORD_LEN
+from adstash.mapping.functions import get_ignore_attrs
 
 import classad2 as classad
-
-
-STATUS = {
-    0: "Unexpanded",
-    1: "Idle",
-    2: "Running",
-    3: "Removed",
-    4: "Completed",
-    5: "Held",
-    6: "Error",
-}
-
-UNIVERSE = {
-    1: "Standard",
-    2: "Pipe",
-    3: "Linda",
-    4: "PVM",
-    5: "Vanilla",
-    6: "PVMD",
-    7: "Scheduler",
-    8: "MPI",
-    9: "Grid",
-    10: "Java",
-    11: "Parallel",
-    12: "Local",
-}
 
 
 _LAUNCH_TIME = int(time.time())
@@ -83,27 +58,35 @@ FIELD_TYPE_MAP = {
 }
 
 
-class ClassAdConverter():
+class GenericClassAdConverter():
 
     def __init__(
             self,
             mapping={},
             projection=set(),
-            ignore_attrs=get_ignore_attrs(),
-            required_attrs=REQUIRED_ATTRS,
-            timestamp_attrs=TIMESTAMP_ATTRS,
-            doc_id_attrs=DOC_ID_ATTRS,
+            ignore_attrs=set(),
+            required_attrs=set(),
+            timestamp_fields=["EnteredCurrentStatus"],
+            doc_id_fields=["RecordTime"],
             ):
         self.mapping = mapping
-        self.ignore_attrs = ignore_attrs
-        self.timestamp_attrs = timestamp_attrs
-        self.doc_id_attrs = doc_id_attrs
+        self.ignore_attrs = get_ignore_attrs(mapping, ignore_attrs)
+        self.required_attrs = required_attrs
+        self.timestamp_fields = timestamp_fields
+        self.doc_id_fields = doc_id_fields
         if len(projection) > 0:
             self.projection = {attr.lower() for attr in projection | required_attrs}
         else:
             self.projection = None
         self.known_field_types = self.get_known_field_types(self.mapping)
         self.dynamic_templates_matchers = self.get_dynamic_template_matchers(self.mapping)
+
+    @lru_cache(maxsize=2048)
+    def log_once(self, msg, handle=logging.warning):
+        """
+        Only print the same warning (approximately) once.
+        """
+        handle(msg)
 
     def get_known_field_types(self, mapping, parent_field_names=[]):
         '''
@@ -143,6 +126,10 @@ class ClassAdConverter():
         return known_field_types
 
     def get_dynamic_template_matchers(self, mapping):
+        """
+        Return an ordered dict with keys containing the names of dynamic templates
+        and values containing information on how to match and map field names.
+        """
         matchers = OrderedDict()
         for dt_name, dt in mapping.get("dynamic_templates", {}).items():
             match_type = "wildcard"
@@ -162,12 +149,12 @@ class ClassAdConverter():
 
     @lru_cache(maxsize=2048)
     def map_unknown_field_type(self, attr):
-        '''
+        """
         Test to see if attr fits any dynamic templates,
         otherwise fall back to whatever the "DEFAULT"
         dynamic template is. Always return the *first*
         match (if any).
-        '''
+        """
         field_name = attr.lower()  # fallback to lowercase attr name if no match
         field_type = self.dynamic_templates_matchers["DEFAULT"]["field_type"]
         for dt_name, dt in self.dynamic_templates_matchers.items():
@@ -187,14 +174,11 @@ class ClassAdConverter():
             self.log_once(f"Encountered new/unknown attr {attr}")
         return field_name, field_type
 
-    @lru_cache(maxsize=2048)
-    def log_once(self, msg, handle=logging.warning):
-        '''
-        Only print the same warning once every 2048 instances.
-        '''
-        handle(msg)
-
     def convert_attr_to_dict(self, attr, value, full_ad):
+        """
+        Convert the given ClassAd attribute-value pair to a dict
+        which can be merged into a document.
+        """
         doc = {}
 
         # 1. Get the field name and field type mappings if known
@@ -295,6 +279,9 @@ class ClassAdConverter():
         return doc
 
     def convert_ad_to_dict(self, ad, parent_attr=""):
+        """
+        Convert a ClassAd to a document (dict) with flattened objects
+        """
         doc = {}
 
         # 1. Loop over all attrs
@@ -317,28 +304,43 @@ class ClassAdConverter():
 
         return doc
 
-    def get_timestamp(self, ad, fallback_to_launch=True):
-        for timestamp_attr in self.timestamp_attrs:
-            if ad.get(timestamp_attr, 0) > 0:
-                return ad[timestamp_attr]
-
-        if fallback_to_launch:
-            self.log_once(f"Could not find valid value for any timestamp attr ({', '.join(self.timestamp_attrs)}), falling back to adstash launch date")
+    def get_timestamp(self, doc, use_launch=False, fallback_to_launch=True):
+        """
+        Return the timestamp field for the document using the first
+        timestamp field found in the provided doc (unless adstash
+        launch time is preferred).
+        """
+        if use_launch:
             return _LAUNCH_TIME
 
-        self.log_once(f"Could not find valid value for any timestamp attr ({', '.join(self.timestamp_attrs)}), timestamp will be 0!")
+        for field in self.timestamp_fields:
+            if doc.get(field, 0) > 0:
+                return doc[field]
+
+        if fallback_to_launch:
+            self.log_once(f"Could not find valid value for any timestamp attr ({', '.join(self.timestamp_fields)}), falling back to adstash launch date")
+            return _LAUNCH_TIME
+
+        self.log_once(f"Could not find valid value for any timestamp attr ({', '.join(self.timestamp_fields)}), timestamp will be 0!")
         return 0
 
-    def get_unique_doc_id(self, ad):
+    def get_unique_doc_id(self, doc):
         """
-        Return a string to uniquely identify documents
+        Return a unique id for the document
         """
-        doc_id_list = [v for v in [ad.get(attr) for attr in self.doc_id_attrs] if v is not None]
+        doc_id_list = [v for v in [doc.get(field) for field in self.doc_id_fields] if v is not None]
         return "#".join(doc_id_list)
 
-    def convert_ad_to_doc(self, ad, decorate_job_ad=True):
-        if ad.get("TaskType") == "ROOT":
-            return None
+
+    def add_additional_fields(self, doc: dict, ad: classad.ClassAd):
+        """
+        Add additional fields from the ad to the doc.
+        """
+        # doc["field"] = ad.get("field")
+        return
+
+
+    def convert_ad_to_doc(self, ad: classad.ClassAd):
 
         # Do the bulk of the conversions
         doc = self.convert_ad_to_dict(ad)
@@ -346,27 +348,7 @@ class ClassAdConverter():
         # Add timestamps
         doc["@timestamp"] = doc["RecordTime"] = self.get_timestamp(ad)
 
-        # Add decorations (only useful for job ads)
-        if decorate_job_ad:
-            doc["ScheddName"] = ad.get("GlobalJobId", "UNKNOWN").split("#")[0]
-            doc["StartdSlot"] = ad.get("RemoteHost", ad.get("LastRemoteHost", "UNKNOWN@UNKNOWN")).split("@")[0]
-            doc["StartdName"] = ad.get("RemoteHost", ad.get("LastRemoteHost", "UNKNOWN@UNKNOWN")).split("@")[-1]
-            doc["Status"] = STATUS.get(ad.get("JobStatus"), "Unknown")
-            doc["Universe"] = UNIVERSE.get(ad.get("JobUniverse"), "Unknown")
+        # Add additional fields
+        self.add_additional_fields(doc, ad)
 
         return doc
-
-
-if __name__ == "__main__":
-
-    from adstash.mapping import get_default_mapping_properties
-    from adstash.mapping import merge_properties
-    from adstash.mapping import METADATA_MAPPING, DYNAMIC_TEMPLATES
-
-    mappings = {
-        "dynamic_templates": DYNAMIC_TEMPLATES,
-        "properties": merge_properties(get_default_mapping_properties(), METADATA_MAPPING),
-        "date_detection": False,
-        "numeric_detection": False,
-    }
-    converter = ClassAdConverter(mappings)

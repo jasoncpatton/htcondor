@@ -20,7 +20,8 @@ import traceback
 from pathlib import Path
 
 from adstash.utils import atomic_write
-from adstash.convert import to_json, unique_doc_id
+from adstash.ad_converters.generic import GenericClassAdConverter
+from adstash.interfaces.generic import GenericInterface
 
 
 class GenericAdSource(object):
@@ -57,7 +58,7 @@ class GenericAdSource(object):
         return []
 
 
-    def process_ads(self, interface, ads, chunk_size=0, **kwargs):
+    def process_ads(self, interface: GenericInterface, converter: GenericClassAdConverter, ads: list, chunk_size=0, **kwargs):
         chunk = []
         generic_checkpoint = None
         checkpoint_reached = False
@@ -71,14 +72,14 @@ class GenericAdSource(object):
                 continue
 
             try:
-                dict_ad = to_json(ad, return_dict=True)
+                dict_ad = converter.convert_ad_to_doc(ad)
             except Exception as e:
                 message = f"Failure when converting document from ClassAd: {str(e)}"
                 exc = traceback.format_exc()
                 message += f"\n{exc}"
                 logging.warning(message)
                 continue
-            chunk.append((unique_doc_id(dict_ad), dict_ad,))
+            chunk.append((converter.get_unique_doc_id(dict_ad), dict_ad,))
             if (chunk_size > 0) and (len(chunk) >= chunk_size):
                 interface.post_ads(chunk, **kwargs)
                 generic_checkpoint = {"GlobalJobId": ad["GlobalJobId"]}
