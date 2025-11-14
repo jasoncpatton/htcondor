@@ -22,7 +22,7 @@ from functools import lru_cache
 from collections import defaultdict, OrderedDict
 
 from adstash.mapping.common import MAX_KEYWORD_LEN
-from adstash.mapping.functions import get_ignore_attrs
+from adstash.mapping.functions import get_ignore_attrs, merge_properties, merge_dynamic_templates
 
 import classad2 as classad
 
@@ -81,6 +81,20 @@ class GenericClassAdConverter():
         self.known_field_types = self.get_known_field_types(self.mapping)
         self.dynamic_templates_matchers = self.get_dynamic_template_matchers(self.mapping)
 
+    def update_mapping(self, mapping: dict):
+        """
+        Update the mapping with an incoming mapping
+        """
+        mapping = mapping.copy()  # make a copy since we're mutating the incoming mapping
+        # pop off the properties and dynamic_templates
+        self.mapping["properties"] = merge_properties(self.mapping.get("properties", {}), mapping.pop("properties", {}))
+        self.mapping["dynamic_templates"] = merge_dynamic_templates(self.mapping.get("dynamic_templates", OrderedDict()), mapping.pop("dynamic_templates", OrderedDict()))
+        # update anything else that happens to be in the new mapping
+        self.mapping.update(mapping)
+        # refresh the known_field_types and dynamic_templates_matchers
+        self.known_field_types = self.get_known_field_types(self.mapping)
+        self.dynamic_templates_matchers = self.get_dynamic_template_matchers(self.mapping)
+
     @lru_cache(maxsize=2048)
     def log_once(self, msg, handle=logging.warning):
         """
@@ -88,7 +102,7 @@ class GenericClassAdConverter():
         """
         handle(msg)
 
-    def get_known_field_types(self, mapping, parent_field_names=[]):
+    def get_known_field_types(self, mapping: dict, parent_field_names=[]) -> defaultdict:
         '''
         Build up a map of sets of known field names and types,
         keyed on the lowercased attribute names. For example,
@@ -125,7 +139,7 @@ class GenericClassAdConverter():
                 known_field_types = known_field_types | self.get_known_field_types(field_properties, field_name_heirarchy)
         return known_field_types
 
-    def get_dynamic_template_matchers(self, mapping):
+    def get_dynamic_template_matchers(self, mapping: dict) -> OrderedDict:
         """
         Return an ordered dict with keys containing the names of dynamic templates
         and values containing information on how to match and map field names.
@@ -148,7 +162,7 @@ class GenericClassAdConverter():
         return matchers
 
     @lru_cache(maxsize=2048)
-    def map_unknown_field_type(self, attr):
+    def map_unknown_field_type(self, attr: str):
         """
         Test to see if attr fits any dynamic templates,
         otherwise fall back to whatever the "DEFAULT"
@@ -174,7 +188,7 @@ class GenericClassAdConverter():
             self.log_once(f"Encountered new/unknown attr {attr}")
         return field_name, field_type
 
-    def convert_attr_to_dict(self, attr, value, full_ad):
+    def convert_attr_to_dict(self, attr: str, value, full_ad: classad.ClassAd) -> dict:
         """
         Convert the given ClassAd attribute-value pair to a dict
         which can be merged into a document.
@@ -278,7 +292,7 @@ class GenericClassAdConverter():
 
         return doc
 
-    def convert_ad_to_dict(self, ad, parent_attr=""):
+    def convert_ad_to_dict(self, ad, parent_attr="") -> dict:
         """
         Convert a ClassAd to a document (dict) with flattened objects
         """
@@ -304,7 +318,7 @@ class GenericClassAdConverter():
 
         return doc
 
-    def get_timestamp(self, doc, use_launch=False, fallback_to_launch=True):
+    def get_timestamp(self, doc: dict, use_launch=False, fallback_to_launch=True) -> int:
         """
         Return the timestamp field for the document using the first
         timestamp field found in the provided doc (unless adstash
@@ -324,7 +338,7 @@ class GenericClassAdConverter():
         self.log_once(f"Could not find valid value for any timestamp attr ({', '.join(self.timestamp_fields)}), timestamp will be 0!")
         return 0
 
-    def get_unique_doc_id(self, doc):
+    def get_unique_doc_id(self, doc: dict) -> str:
         """
         Return a unique id for the document
         """
@@ -340,7 +354,7 @@ class GenericClassAdConverter():
         return
 
 
-    def convert_ad_to_doc(self, ad: classad.ClassAd):
+    def convert_ad_to_doc(self, ad: classad.ClassAd) -> dict:
 
         # Do the bulk of the conversions
         doc = self.convert_ad_to_dict(ad)

@@ -33,6 +33,7 @@ except ModuleNotFoundError as err:
 import adstash.convert as convert
 from adstash.utils import get_host_port
 from adstash.interfaces.generic import GenericInterface
+from adstash.ad_converters.generic import GenericClassAdConverter
 
 ES8 = (8,0,0)
 if _ES_MODULE_FOUND and (ES_VERSION < (7,0,0) or ES_VERSION >= (9,0,0)):

@@ -39,7 +39,7 @@ def flatten_mapping_properties(properties: dict, parent="") -> dict:
     return flattened_properties
 
 
-# Merging will add subfields where possible when there are conflicts.
+# Merging will add multi-fields where possible when there are conflicts.
 # Ideally, this function's arguments are in order of:
 # 1. Existing properties (since existing mappings cannot be mutated)
 # 2. Custom properties
@@ -47,27 +47,51 @@ def flatten_mapping_properties(properties: dict, parent="") -> dict:
 def merge_properties(*properties_in: dict) -> dict:
     if len(properties_in) < 2:
         raise ValueError("merge_proprties requires at least two dicts")
+
     properties_out = {}
+
+    # Start with properties from the first argument
     flattened_properties_in = flatten_mapping_properties(properties_in[0])
     properties_out.update(flattened_properties_in)
+
+    # Merge the other properties, adding multi-fields when possible if there are conflicts
     for property_in in properties_in[1:]:
         flattened_properties_in = flatten_mapping_properties(property_in)
-        for k, v in flattened_properties_in.items():
-            # check for conflict
-            if k in properties_out and v.get("type", "object") != properties_out[k].get("type", "object") and v.get("type", "object") not in {"object", "nested"}:
-                # check for existing subfield definitions
-                if "fields" in properties_out[k]:
-                    # ignore if this subfield already exists
-                    if v["type"] in properties_out[k]["fields"]:
-                        continue
-                    properties_out[k]["fields"][v]["type"] = v
-                else:
-                    properties_out[k]["fields"] = {v["type"]: v}
-            # can't do subfields with object and nested types
-            elif k in properties_out and v.get("type", "object") != properties_out[k].get("type", "object") and v.get("type", "object") in {"object", "nested"}:
-                logging.error(f"Could not set field {k} to type {v['type']}, field is already set to {properties_out[k].get('type')}")
+        for field, mapping in flattened_properties_in.items():
+            new_field_type = mapping.get("type", "object")
+
+            # Add the field if it doesn't exist yet
+            if field not in properties_out:
+                properties_out[field] = mapping
+                continue
+
+            existing_field_type = properties_out[field].get("type", "object")
+
+            # If the fields have the same type, merge additional properties
+            if new_field_type == existing_field_type:
+                for key, value in mapping.items():
+                    properties_out[field][key] = value
+                continue
+
+            # If the new or existing field types are object or nested, skip it
+            if {existing_field_type, new_field_type} & {"object", "nested"}:
+                logging.error(f"Field {field} is already set to {existing_field_type}, could not set field to type {new_field_type} or add multi-fields")
+                continue
+
+            # Check for existing multi-field definitions
+            if "fields" in properties_out[field]:
+
+                # Ignore if this multi-field already exists
+                if new_field_type in properties_out[field]["fields"]:
+                    continue
+
+                # Add the mapping to the existing mutli-fields
+                properties_out[field]["fields"][new_field_type] = mapping
+
             else:
-                properties_out[k] = v
+                # Add multi-fields to this field (with same name as the field type) and add the mapping
+                properties_out[field]["fields"] = {new_field_type: mapping}
+
     return properties_out
 
 
@@ -82,9 +106,16 @@ def merge_dynamic_templates(default_dts, custom_dts) -> list:
     # first, then custom templates, and make sure the DEFAULT
     # template is last.
     dts_out.update(default_dts)
-    dt_default = dts_out.pop("DEFAULT")
-    dts_out.update(custom_dts)
-    dts_out["DEFAULT"] = dts_out.get("DEFAULT", dt_default)
+    dt_default = dts_out.pop("DEFAULT", None)
+
+    for key, value in custom_dts.items():
+        if key == "DEFAULT":
+            dts_out["CUSTOM_DEFAULT"] = value
+        else:
+            dts_out[key] = value
+
+    if dt_default is not None:
+        dts_out["DEFAULT"] = dt_default
 
     # Return a list that can be turned into JSON
     return [{dt_name: dt} for dt_name, dt in dts_out.items()]
