@@ -15,8 +15,8 @@
 
 
 def null_interface():
-    from adstash.interfaces.null import NullInterface
-    return NullInterface
+    from adstash.interfaces.generic import GenericInterface
+    return GenericInterface
 def elasticsearch_interface():
     from adstash.interfaces.elasticsearch import ElasticsearchInterface
     return ElasticsearchInterface

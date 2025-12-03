@@ -36,7 +36,7 @@ DEFAULT_ILM_POLICY = {
                 "min_age": "0ms",
                 "actions": {
                     "rollover": {
-                        "max_size": "50gb",  # 50gb segments
+                        "max_primary_shard_size": "50gb",  # 50gb segments
                         "max_age": "120d"  # rollover approx. quarterly
                     },
                     "set_priority": {
