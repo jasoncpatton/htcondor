@@ -15,7 +15,7 @@
 
 from collections import OrderedDict
 
-from adstash.mapping.common import MAX_KEYWORD_LEN
+from adstash.mapping.common import MAX_KEYWORD_LEN, METADATA_MAPPING, OTHER_MAPPING_SETTINGS
 
 
 # INDEXED_TEXT_ATTRS should only contain string attrs that

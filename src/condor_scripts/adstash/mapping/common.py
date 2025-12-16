@@ -35,3 +35,8 @@ METADATA_MAPPING = {
         "type": "object",
     },
 }
+
+OTHER_MAPPING_SETTINGS = {
+    "date_detection": False,
+    "numeric_detection": False,
+}

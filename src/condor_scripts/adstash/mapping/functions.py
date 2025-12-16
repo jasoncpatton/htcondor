@@ -139,8 +139,8 @@ def get_default_mapping_properties(ad_type) -> dict:
         field: field_type for field, field_type in
             [(field, {"type": "text"}) for field in ad_type.INDEXED_TEXT_ATTRS] +
             [(field, {"type": "text", "norms": "false", "index": "false"}) for field in ad_type.NON_INDEXED_TEXT_ATTRS] +
-            [(field, {"type": "keyword", "ignore_above": MAX_KEYWORD_LEN}) for field in ad_type.INDEXED_KEYWORD_ATTRS] +
-            [(field, {"type": "keyword", "index": "false", "ignore_above": MAX_KEYWORD_LEN}) for field in ad_type.NON_INDEXED_KEYWORD_ATTRS] +
+            [(field, {"type": "keyword", "ignore_above": ad_type.MAX_KEYWORD_LEN}) for field in ad_type.INDEXED_KEYWORD_ATTRS] +
+            [(field, {"type": "keyword", "index": "false", "ignore_above": ad_type.MAX_KEYWORD_LEN}) for field in ad_type.NON_INDEXED_KEYWORD_ATTRS] +
             [(field, {"type": "double"}) for field in ad_type.FLOAT_ATTRS] +
             [(field, {"type": "long"}) for field in ad_type.INT_ATTRS] +
             [(field, {"type": "date", "format": "epoch_second"}) for field in ad_type.DATE_ATTRS] +
@@ -148,4 +148,14 @@ def get_default_mapping_properties(ad_type) -> dict:
             [(field, {"type": "object", "dynamic": True}) for field in ad_type.OBJECT_ATTRS] +
             [(field, {"type": "nested", "dynamic": True}) for field in ad_type.NESTED_ATTRS]
     }
+    properties.update(ad_type.METADATA_MAPPING)
     return properties
+
+
+def get_default_mappings(ad_type) -> dict:
+    mappings = {
+        "properties": get_default_mapping_properties(ad_type),
+        "dynamic_templates": ad_type.DYNAMIC_TEMPLATES,
+        **ad_type.OTHER_MAPPING_SETTINGS,
+    }
+    return mappings
