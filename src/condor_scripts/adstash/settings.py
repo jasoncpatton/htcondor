@@ -20,7 +20,7 @@ from pathlib import Path
 
 from adstash.mapping.functions import count_total_fields
 
-DEFAULT_SETTINGS = {
+DEFAULT_INITIAL_SETTINGS = {
     "index": {
         "mapping": {
             "ignore_malformed": True,  # https://www.elastic.co/guide/en/elasticsearch/reference/7.17/ignore-malformed.html#ignore-malformed-setting
@@ -70,8 +70,10 @@ class SearchEngineSettings():
     def __init__(self, index_name, mappings, custom_settings={}, existing_settings={}):
         self.alias = index_name
         self.mappings = mappings
-        self.settings = self.merge_settings(DEFAULT_SETTINGS, existing_settings, custom_settings)
-        self._update_settings_fields_limit()
+        self.existing_settings = existing_settings or DEFAULT_INITIAL_SETTINGS
+        self.settings = self.flatten_settings(self.existing_settings)
+        self.update_settings = self.flatten_settings(custom_settings)
+        self._calculate_update_settings_fields_limit()
         self.index_template_name = f"{index_name}-template"
         self.index_definition = {
             "settings": self.settings,
@@ -97,7 +99,8 @@ class SearchEngineSettings():
 
     def update_mappings(self, mappings):
         self.mappings = mappings
-        self._update_settings_fields_limit()
+        self._calculate_update_settings_fields_limit()
+        self.settings = self.merge_settings(self.existing_settings, self.update_settings)
 
     def get_index_template(self):
         index_template = {
@@ -110,12 +113,12 @@ class SearchEngineSettings():
     # Consider that any custom attribute, unless it is somehow added to the ignored attr list
     # will cause a new field to be mapped. So in order to make sure we don't drop any docs,
     # this the field limit needs to be upped occasionally.
-    def _update_settings_fields_limit(self):
-        previous_limit = self.settings["index.mapping.total_fields.limit"]
-        self.settings["index.mapping.total_fields.limit"] = max(2 * count_total_fields(self.mappings), previous_limit)
+    def _calculate_update_settings_fields_limit(self):
+        previous_limit = int(self.settings.get("index.mapping.total_fields.limit", 0))
+        self.update_settings["index.mapping.total_fields.limit"] = max(2 * count_total_fields(self.mappings), previous_limit)
         # Using limit = 5000 as an arbitrary point to start warning about performance degredation
-        if self.settings["index.mapping.total_fields.limit"] > 5000 and self.settings["index.mapping.total_fields.limit"] > previous_limit:
-            logging.warning(f"Large index.mapping.total_fields.limit: {self.settings['index.mapping.total_fields.limit']}")
+        if self.update_settings["index.mapping.total_fields.limit"] > 5000 and self.update_settings["index.mapping.total_fields.limit"] > previous_limit:
+            logging.warning(f"Large index.mapping.total_fields.limit: {self.update_settings['index.mapping.total_fields.limit']}")
             logging.warning("Fields accumulate over time due to new attributes (custom or first-class).")
             logging.warning("You may experience degraded performance when the limit gets large, see e.g.:")
             logging.warning("https://www.elastic.co/docs/reference/elasticsearch/index-settings/mapping-limit")

@@ -49,6 +49,7 @@ def strict_bool(i):
 FIELD_TYPE_MAP = {
     "text": str,
     "keyword": str,
+    "float": float,
     "double": float,
     "long": int,
     "date": int,
@@ -145,7 +146,9 @@ class GenericClassAdConverter():
         and values containing information on how to match and map field names.
         """
         matchers = OrderedDict()
-        for dt_name, dt in mapping.get("dynamic_templates", {}).items():
+        for dynamic_template in mapping.get("dynamic_templates", []):
+            dt_name = list(dynamic_template.keys())[0]
+            dt = dynamic_template[dt_name]
             match_type = "wildcard"
             match_pattern = dt.get("match", "")
             if dt.get("match_pattern") == "regex":
@@ -184,8 +187,9 @@ class GenericClassAdConverter():
                     field_type = dt["field_type"]
                     self.log_once(f"Attr {attr} matched dynamic template {dt_name}", logging.info)
                     break
-        else:
-            self.log_once(f"Encountered new/unknown attr {attr}")
+        else:  # Alert if we've never seen this before
+            if not ({field_name, f"{field_name}_EXPR"} & self.mapping["properties"].keys()):
+                self.log_once(f"Encountered new/unknown attr {attr}")
         return field_name, field_type
 
     def convert_attr_to_dict(self, attr: str, value, full_ad: classad.ClassAd) -> dict:
@@ -342,7 +346,7 @@ class GenericClassAdConverter():
         """
         Return a unique id for the document
         """
-        doc_id_list = [v for v in [doc.get(field) for field in self.doc_id_fields] if v is not None]
+        doc_id_list = [str(v) for v in [doc.get(field) for field in self.doc_id_fields] if v is not None]
         return "#".join(doc_id_list)
 
 

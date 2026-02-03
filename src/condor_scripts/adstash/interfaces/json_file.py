@@ -15,7 +15,6 @@
 
 import time
 import json
-import logging
 
 from pathlib import Path
 
@@ -31,18 +30,11 @@ class JSONFileInterface(GenericInterface):
         super().__init__(**kwargs)
 
 
-    def update_mappings(self, mappings: dict, **kwargs):
-        if self.log_mappings and self.log_dir:
-            mappings_file = self.log_dir / "condor_adstash_jsonfile_last_mappings.json"
-            logging.debug(f"Writing updated mappings to {mappings_file}.")
-            json.dump(mappings, open(mappings_file, "w"), indent=2)
-
-
     def make_bulk_body(self, docs: list, metadata={}) -> str:
         body = []
         for doc_id, doc in docs:
             doc["_id"] = doc_id
-            doc.update(metadata)  # bolt on the metadata
+            doc["metadata"] = metadata  # bolt on the metadata
             body.append(doc)
 
         if self.json_legacy:

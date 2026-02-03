@@ -90,7 +90,7 @@ class JobClassAdConverter(GenericClassAdConverter):
             **kwargs,
             )
 
-    def decorate_doc(self, doc: dict, ad: classad.ClassAd):
+    def add_additional_fields(self, doc: dict, ad: classad.ClassAd):
         doc["ScheddName"] = ad.get("GlobalJobId", "UNKNOWN").split("#")[0]
         doc["StartdSlot"] = ad.get("RemoteHost", ad.get("LastRemoteHost", "UNKNOWN@UNKNOWN")).split("@")[0]
         doc["StartdName"] = ad.get("RemoteHost", ad.get("LastRemoteHost", "UNKNOWN@UNKNOWN")).split("@")[-1]

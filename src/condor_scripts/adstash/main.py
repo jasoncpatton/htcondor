@@ -18,11 +18,10 @@ import logging
 import multiprocessing
 import queue
 
-from adstash.utils import get_schedds, get_startds, collect_process_metadata
+from adstash.utils import get_schedds, get_startds, collect_process_metadata, set_up_logging
 from adstash.ad_sources.registry import ADSTASH_AD_SOURCE_REGISTRY
 from adstash.interfaces.registry import ADSTASH_INTERFACE_REGISTRY
-from adstash.mapping import job, job_epoch, transfer_epoch
-from adstash.mapping.functions import get_default_mapping_properties
+from adstash.index_setup import setup_index
 from adstash.ad_converters.job import JobClassAdConverter
 from adstash.ad_converters.job_epoch import JobEpochClassAdConverter
 from adstash.ad_converters.transfer_epoch import TransferEpochClassAdConverter
@@ -33,12 +32,6 @@ CHECKPOINT_KEY_TEMPLATE = {
     "startd_history": "{name}",
     "schedd_job_epoch_history": "Job Epoch {name}",
     "schedd_transfer_epoch_history": "Transfer Epoch {name}",
-}
-
-AD_TYPE_DEFAULT_MAPPINGS = {
-    "history": job,
-    "job_epoch_history": job_epoch,
-    "transfer_epoch_history": transfer_epoch,
 }
 
 AD_TYPE_CONVERTERS = {
@@ -56,10 +49,13 @@ def _ckpt_updater(args, checkpoint_queue, ad_source, daemon_type="unknown daemon
     2. the queue is empty, or
     3. the value None is fetched from the queue.
     """
+    set_up_logging(args)
     timeout = vars(args).get(f"{daemon_type}_history_timeout")
     while True:
         try:
+            logging.debug(f"Waiting {timeout} seconds for checkpoint...")
             checkpoint = checkpoint_queue.get(timeout=timeout)
+            logging.debug(f"Got checkpoint {checkpoint}...")
         except queue.Empty:
             logging.warning(f"Nothing to consume in {daemon_type} checkpoint queue in last {timeout} seconds, exiting early.")
             break
@@ -74,11 +70,11 @@ def adstash(args):
     """Main execution loop."""
     starttime = time.time()
 
-    interface_info = ADSTASH_INTERFACE_REGISTRY[args.interface]
+    interface_class = ADSTASH_INTERFACE_REGISTRY[args.interface]()
     interface_kwargs = {}
     ad_source_kwargs = {}
 
-    if interface_info["type"] == "se":  # set up search engine-specific options
+    if interface_class.is_search_engine:  # set up search engine-specific options
         interface_kwargs = {
             "host": args.se_host,
             "url_prefix": args.se_url_prefix,
@@ -87,31 +83,35 @@ def adstash(args):
             "use_https": args.se_use_https,
             "ca_certs": args.se_ca_certs,
             "timeout": args.se_timeout,
-            "log_mappings": args.se_log_mappings,
         }
         ad_source_kwargs = {
             "chunk_size": args.se_bunch_size,
             "index": args.se_index_name,
         }
-    elif interface_info["type"] == "jsonfile":  # set up JSON file-specific options
+    else:  # set up JSON file-specific options
         interface_kwargs = {
-            "log_mappings": args.se_log_mappings,
-            "log_dir": args.json_dir,
+            "json_dir": args.json_dir,
         }
 
-    interface = interface_info["class"]()(**interface_kwargs)
-
-    # TODO: do something about args.init_index
+    interface = interface_class(**interface_kwargs)
 
     metadata = collect_process_metadata()
     skip_daemons = args.read_ad_file is not None
     for source_type, source_cls in ADSTASH_AD_SOURCE_REGISTRY.items():
 
         if source_type == "ad_file" and args.read_ad_file is not None:
+
+            # Currently, we assume generic ad files are from job history
+            mappings, settings = setup_index(interface=interface, ad_type="history", args=args)
+            converter = AD_TYPE_CONVERTERS["history"](
+                mapping=mappings,
+                # TODO get combined ignore attrs
+            )
+
             metadata["condor_adstash_source"] = "ad_file"
-            ad_source = source_cls()()
+            ad_source = source_cls()(args=args)
             ads = ad_source.fetch_ads(args.read_ad_file)
-            for _ in ad_source.process_ads(interface, ads, metadata=metadata, **ad_source_kwargs):
+            for _ in ad_source.process_ads(interface, converter, ads, metadata=metadata, **ad_source_kwargs):
                 pass
 
         else:
@@ -122,25 +122,12 @@ def adstash(args):
                     logging.warning(f"Skipping querying {daemon_type}s since --read_ad_file was set.")
                     continue
 
-                # TODO spin this off into util function
-                # Build mappings
-                existing_mappings = interface.get_mappings().get("mappings", {})
-                existing_properties = existing_mappings.pop("properties", {})
-                existing_templates = existing_mappings.pop("dynamic_templates". {})
-
-                custom_properties = args.custom_field_properties
-                custom_templates = args.custom_dynamic_templates
-
-                default_properties = get_default_mapping_properties(AD_TYPE_DEFAULT_MAPPINGS[ad_type])
-                default_templates = AD_TYPE_DEFAULT_MAPPINGS[ad_type].DYNAMIC_TEMPLATES
-
-                # combine mappings
-                mappings = existing_mappings.copy()
-                mappings["properties"] = combine_properties(existing_properties, custom_properties, default_properties)
-                mappings["dynamic_templates"] = combine_templates(existing_templates, custom_templates, default_templates)
-                converter = AD_TYPE_CONVERTERS[ad_type](mapping=mappings, projection=args.{daemon}_history_projection, ignore_attrs=args.custom_ignore_attrs)
-
-                # Check settings
+                mappings, settings = setup_index(interface=interface, ad_type=ad_type, args=args)
+                converter = AD_TYPE_CONVERTERS[ad_type](
+                    mapping=mappings,
+                    projection=vars(args)[f"{daemon_type}_history_projection"],
+                    # TODO get combined ignore attrs
+                )
 
                 name_attr = "Name"
                 if source_type.startswith("startd_"):
@@ -168,8 +155,9 @@ def adstash(args):
 
                             future = pool.apply_async(
                                 history_processor,
-                                (ad_source, daemon_type, daemon_ad, checkpoint_queue, checkpoint_key, interface, metadata, args, ad_source_kwargs),
+                                (ad_source, daemon_type, daemon_ad, checkpoint_queue, checkpoint_key, interface, converter, metadata, args, ad_source_kwargs),
                             )
+                            futures.append((daemon_name, future))
 
                     ckpt_updater = multiprocessing.Process(target=_ckpt_updater, args=(args, checkpoint_queue, ad_source, daemon_type))
                     ckpt_updater.start()
@@ -198,8 +186,9 @@ def adstash(args):
     return processing_time
 
 
-def history_processor(src, daemon_type, daemon_ad, ckpt_queue, ckpt_key, iface, metadata, args, ad_source_kwargs):
+def history_processor(src, daemon_type, daemon_ad, ckpt_queue, ckpt_key, iface, converter, metadata, args, ad_source_kwargs):
     """Fetch condor_history from the given daemon and push docs to the given interface"""
+    set_up_logging(args)
     metadata = metadata.copy()
     metadata["condor_history_runtime"] = int(time.time())
     metadata["condor_history_host_version"] = daemon_ad.get("CondorVersion", "UNKNOWN")
@@ -208,15 +197,19 @@ def history_processor(src, daemon_type, daemon_ad, ckpt_queue, ckpt_key, iface, 
     metadata["condor_history_host_name"] = daemon_ad.get("Name", "UNKNOWN")
     daemon_name = daemon_ad.get("Name", daemon_ad.get("Machine", "UNKNOWN"))
     try:
+        logging.debug("Started fetching ads")
         ads = src.fetch_ads(daemon_ad, max_ads=vars(args)[f"{daemon_type}_history_max_ads"], projection=vars(args)[f"{daemon_type}_history_projection"])
+        logging.debug("Finished fetching ads")
     except Exception as e:
         logging.error(f"Could not fetch ads from {daemon_name}: {e.__class__.__name__}: {str(e)}")
         return
     if ads is None:
+        logging.info(f"{daemon_type} {daemon_name} did not return any ads")
         return
     try:
-        for ckpt in src.process_ads(iface, ads, daemon_ad, metadata=metadata, **ad_source_kwargs):
+        logging.info(f"Processing ads from {daemon_type} {daemon_name}")
+        for ckpt in src.process_ads(iface, converter, ads, daemon_ad, metadata=metadata, **ad_source_kwargs):
             if ckpt is not None:
                 ckpt_queue.put({ckpt_key: ckpt})
     except Exception as e:
-        logging.error(f"Could not push ads from {daemon_name}: {e.__class__.__name__}: {str(e)}")
+        logging.exception(f"Could not push ads from {daemon_name}: {e.__class__.__name__}: {str(e)}")

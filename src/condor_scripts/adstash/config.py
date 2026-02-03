@@ -23,6 +23,7 @@ import argparse
 import htcondor2 as htcondor
 
 from pathlib import Path
+from collections import OrderedDict
 
 from adstash.interfaces.registry import ADSTASH_INTERFACES
 
@@ -56,10 +57,10 @@ def get_default_config(name="ADSTASH"):
         "se_index_name": "htcondor-000001",
         "se_log_mappings": True,
         "json_dir": Path.cwd(),
-        "custom_field_properties": {},
-        "custom_dynamic_templates": {},
+        "custom_field_properties": None,
+        "custom_dynamic_templates": None,
         "custom_ignore_attrs": set(),
-        "custom_index_settings": {},
+        "custom_index_settings": None,
         "init_index": False,
     }
     return defaults
@@ -571,7 +572,7 @@ def get_config(argv=None):
         "--se_no_log_mappings",
         dest="se_log_mappings",
         action="store_false",
-        help="Don't write a JSON file with mappings to the log directory",
+        help="Don't write a JSON file with mappings and settings to the log directory",
     )
     se_group.add_argument(
         "--se_ca_certs", "--ca_certs",
@@ -691,5 +692,10 @@ def get_config(argv=None):
         if arg == "--json_local":
             logging.warning(f"Use of --json_local is deprecated, use --interface=jsonfile instead.")
             args.interface="jsonfile"
+
+    # Set the log dir for mappings and settings
+    args.se_log_mappings_dir = args.log_file.parent  # Default to same dir as log file
+    if args.interface == "jsonfile":  # Backwards compat, mappings used to be stored in JSON dir
+        args.se_log_mappings_dir = args.json_dir
 
     return args

@@ -29,9 +29,9 @@ def json_file_interface():
 
 
 ADSTASH_INTERFACE_REGISTRY = {
-    "null": {"class": null_interface, "type": None},
-    "elasticsearch": {"class": elasticsearch_interface, "type": "se"},
-    "opensearch": {"class": opensearch_interface, "type": "se"},
-    "jsonfile": {"class": json_file_interface, "type": "jsonfile"},
+    "null": null_interface,
+    "elasticsearch": elasticsearch_interface,
+    "opensearch": opensearch_interface,
+    "jsonfile": json_file_interface,
 }
 ADSTASH_INTERFACES = list(ADSTASH_INTERFACE_REGISTRY.keys())

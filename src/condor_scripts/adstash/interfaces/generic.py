@@ -21,10 +21,13 @@ class GenericInterface():
     Generic base class for consuming converted ClassAds
     """
 
+    # Search engine interfaces should implement methods for handling reading
+    # and setting index mappings and settings.
+    is_search_engine = False
 
-    def __init__(self, log_mappings=True, log_dir=Path.cwd(), **kwargs):
-        self.log_mappings = log_mappings
-        self.log_dir = log_dir
+
+    def __init__(self, **kwargs):
+        pass
 
 
     def post_ads(self, ads: list, **kwargs) -> dict:

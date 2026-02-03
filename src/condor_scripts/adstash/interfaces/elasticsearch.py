@@ -38,6 +38,7 @@ if _ES_MODULE_FOUND and (ES_VERSION < (7,0,0) or ES_VERSION >= (9,0,0)):
 
 class ElasticsearchInterface(GenericInterface):
 
+    is_search_engine = True
 
     def __init__(
             self,
@@ -63,6 +64,13 @@ class ElasticsearchInterface(GenericInterface):
         self.timeout = timeout
         self.handle = None
         super().__init__(**kwargs)
+
+
+    def __getstate__(self):
+        """Remove handle to make object pickleable"""
+        state = self.__dict__.copy()
+        state["handle"] = None
+        return state
 
 
     def get_handle(self) -> elasticsearch.Elasticsearch:
@@ -106,6 +114,24 @@ class ElasticsearchInterface(GenericInterface):
         return self.handle
 
 
+    def ping(self) -> None:
+        client = self.get_handle()
+        if not client.ping():
+            raise ConnectionError(f"Could not connect to {self.__class__.__name__} at {self.host}:{self.port}")
+
+
+    def get_health(self) -> dict:
+        client = self.get_handle()
+        health = {}
+        try:
+            health = client.cluster.health()
+        except elasticsearch.exceptions.AuthorizationException:
+            logging.warning(f"Search engine user {self.username} does not have cluster-level access, cannot get health status")
+        except Exception as e:
+            logging.exception(f"Cannot get health status due to error")
+        return health
+
+
     def get_active_index(self, alias: str) -> str:
         client = self.get_handle()
         try:
@@ -129,10 +155,16 @@ class ElasticsearchInterface(GenericInterface):
 
     def get_mappings(self, index: str) -> dict:
         """
-        Fetch the existing mappings for an index
+        Fetch the existing mappings for an index (if it exists)
         """
         client = self.get_handle()
-        return client.indices.get_mapping(index=index)[index]["mappings"]
+        mappings = {}
+        try:
+            mappings = client.indices.get_mapping(index=index)[index]["mappings"]
+        except elasticsearch.exceptions.NotFoundError:
+            logging.warning(f"Index {index} was not found, assuming no existing mappings")
+
+        return mappings
 
 
     def get_settings(self, index: str) -> dict:
@@ -155,10 +187,20 @@ class ElasticsearchInterface(GenericInterface):
             client.indices.put_mapping(index=index, body=json.dumps(mappings))
         elif ES_VERSION >= ES8:
             client.indices.put_mapping(index=index, **mappings)
-        if self.log_mappings and self.log_dir:
-            mappings_file = self.log_dir / "condor_adstash_elasticsearch_last_mappings.json"
-            logging.debug(f"Writing updated mappings to {mappings_file}.")
-            json.dump(mappings, open(mappings_file, "w"), indent=2)
+
+
+    def update_settings(self, index: str, settings: dict, **kwargs):
+        """
+        Given an index and settings, push the new settings to the index
+        """
+        client = self.get_handle()
+
+        logging.info(f"Updating settings for index {index}")
+        logging.debug(json.dumps(settings, indent=2))
+        if ES_VERSION < ES8:
+            client.indices.put_settings(index=index, body=json.dumps(settings))
+        elif ES_VERSION >= ES8:
+            client.indices.put_settings(index=index, settings=settings)
 
 
     def make_bulk_body(self, docs: list, metadata={}) -> str:
@@ -170,10 +212,10 @@ class ElasticsearchInterface(GenericInterface):
         """
         body = []
         for doc_id, doc in docs:
-            doc.update(metadata)  # bolt on the metadata
+            doc["metadata"] = metadata  # bolt on the metadata
             action = {"index": {"_id": doc_id}}  # index the doc w/ this id
             body.append(json.dumps(action))
-            body.append(json.dumps(doc))
+            body.append(json.dumps(doc, sort_keys=True))
         return "\n".join(body)
 
 

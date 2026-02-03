@@ -203,7 +203,7 @@ class TransferEpochClassAdConverter(GenericClassAdConverter):
         attempt = f"{doc.get('Attempt', 0)}_{doc.get('Attempts', 1)}"
         return f"{schedd_name}#{job_id}#{shadow_starts}#{xfer_protocol}#{xfer_type}#{file_number}#{date}#{attempt}"
 
-    def decorate_doc(self, doc, ad):
+    def add_additional_fields(self, doc, ad):
         # Python None converts to JSON null. Helpfully, Elasticsearch will ignore null values.
         doc["ScheddName"] = ad.get("GlobalJobId", "").split("#", maxsplit=1)[0] or None
         doc["ClusterId"] = ad.get("ClusterId", ad.get("GlobalJobId", "#.").split("#")[1].split(".")[0]) or None
@@ -219,7 +219,7 @@ class TransferEpochClassAdConverter(GenericClassAdConverter):
             # Add timestamps
             doc["@timestamp"] = doc["RecordTime"] = self.get_timestamp(ad)
 
-            # Decorate doc
-            self.decorate_doc(doc, ad)
+            # Add additional fields
+            self.add_additional_fields(doc, ad)
 
             yield doc
