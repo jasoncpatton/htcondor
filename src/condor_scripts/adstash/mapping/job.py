@@ -149,6 +149,7 @@ INDEXED_KEYWORD_ATTRS = {
     "RemoveReason",
     "RequestedAcctGroup",
     "RequeueReason",
+    "RetryRequestMemory",
     "RootDir",
     "ScheddName",
     "ShadowIpAddr",
@@ -174,6 +175,7 @@ INDEXED_KEYWORD_ATTRS = {
     "TransferOutput",
     "TransferOutputRemaps",
     "TransferPlugins",
+    "TransformOnEvict",
     "Universe",
     "User",
     "UserLog",
@@ -377,7 +379,6 @@ INT_ATTRS = {
     "RequestVirtualMemory",
     "ResidentSetSize_RAW",
     "ResidentSetSize",
-    "RetryRequestMemory",
     "ScratchDirFileCount",
     "StackSize",
     "StatsLifetime",
@@ -630,6 +631,10 @@ IGNORE_ATTRS = {
 DYNAMIC_TEMPLATES = [
     {"raw_expression": {  # Attrs ending in "_EXPR" are generated during
         "match": r"*_EXPR",  # ad conversion for expressions that cannot be evaluated
+        "mapping": {"type": "keyword", "ignore_above": MAX_KEYWORD_LEN},
+    }},
+    {"transformbody_attrs": {  # Retry request attr expressions
+        "match": r"TransformBody_*",
         "mapping": {"type": "keyword", "ignore_above": MAX_KEYWORD_LEN},
     }},
     {"date_attrs": {  # Attrs ending in "Date" are usually timestamps
