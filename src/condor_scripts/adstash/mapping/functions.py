@@ -100,27 +100,40 @@ def merge_properties(*properties_in: dict) -> dict:
 # Dynamic templates are evaluated in order, and once a
 # template matches a field, the rest are ignored for that field.
 # The catchall "DEFAULT" template should always be last.
-def merge_dynamic_templates(default_dts, custom_dts) -> list:
-    dts_out = OrderedDict()
+def merge_dynamic_templates(default_dts: list, custom_dts: list) -> list:
+    dts_out = []
+    dts_keys = []
+    final_dt = []
 
-    # Updating an OrderedDict puts any new values at the bottom,
-    # so the order here matters. Try to match default templates
-    # first, then custom templates, and make sure the DEFAULT
-    # template is last.
-    dts_out.update(default_dts)
-    dt_default = dts_out.pop("DEFAULT", None)
+    # Add the defaults first (in case they get overwritten later)
+    for dt in default_dts:
+        dt_key = list(dt.keys())[0]
+        if dt_key == "DEFAULT":  # Keep around the fallback template
+            final_dt = [dt]
+            continue
+        if dt_key in dts_keys:  # De-duplicate template names
+            dt_i = dts_keys.index(dt_key)
+            del dts_out[dt_i]
+            del dts_keys[dt_i]
+        dts_out.append(dt)
+        dts_keys.append(dt_key)
 
-    for key, value in custom_dts.items():
-        if key == "DEFAULT":
-            dts_out["CUSTOM_DEFAULT"] = value
-        else:
-            dts_out[key] = value
+    for dt in custom_dts:
+        dt_key = list(dt.keys())[0]
+        if dt_key == "DEFAULT":
+            dt_key = "CUSTOM_DEFAULT"
+            dt = {dt_key: list(dt.values())[0]}
+        if dt_key in dts_keys:  # De-duplicate template names
+            dt_i = dts_keys.index(dt_key)
+            del dts_out[dt_i]
+            del dts_keys[dt_i]
+        dts_out.append(dt)
+        dts_keys.append(dt_key)
 
-    if dt_default is not None:
-        dts_out["DEFAULT"] = dt_default
+    # Append the fallback template to always be last
+    dts_out += final_dt
 
-    # Return a list that can be turned into JSON
-    return [{dt_name: dt} for dt_name, dt in dts_out.items()]
+    return dts_out
 
 
 # This will estimate the number of fields based on the

@@ -52,7 +52,8 @@ def set_index_mappings(
     existing_mappings = {}
     if interface.is_search_engine:
         logging.info(f"Getting existing index mappings from {interface.__class__.__name__}")
-        existing_mappings = interface.get_mappings(index)
+        active_index = interface.get_active_index(index)
+        existing_mappings = interface.get_mappings(active_index)
     mappings = existing_mappings.copy()
 
     existing_properties = mappings.pop("properties", {})
@@ -78,10 +79,29 @@ def set_index_settings(
         custom_settings: dict,
     ) -> dict:
 
+
     existing_settings = {}
     if interface.is_search_engine:
         logging.info(f"Getting existing index settings from {interface.__class__.__name__}")
-        existing_settings = interface.get_settings(index)
+        active_index = interface.get_active_index(index)
+        existing_settings = interface.get_settings(active_index)
+
+    # Only pass along the field limit, other settings are likely to be immutable
+    field_limit_settings = {}
+    try:
+        field_limit_settings = {
+            "index": {
+                "mapping": {
+                    "total_fields": {
+                        "limit": existing_settings["index"]["mapping"]["total_fields"]["limit"]
+                    }
+                }
+            }
+        }
+    except (IndexError, ValueError, KeyError):
+        logging.warning(f"{existing_settings}")
+        pass
+    existing_settings = field_limit_settings
 
     ses = SearchEngineSettings(
         index_name=index,

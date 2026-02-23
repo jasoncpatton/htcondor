@@ -135,7 +135,7 @@ class SearchEngineSettings():
                 logging.warning(f"Recommend use of index templates when using ILM to preserve")
                 logging.warning(f"setttings and mappings after rollovers.")
             self.settings["index.lifecycle.name"] = ilm_policy_name
-            self.settings["index.rollover_alias"] = self.alias
+            self.settings["index.lifecycle.rollover_alias"] = self.alias
             files["ilm"] = {"name": f"{ilm_policy_name}.json", "contents": DEFAULT_ILM_POLICY}
 
         if use_template:

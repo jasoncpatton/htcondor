@@ -627,45 +627,46 @@ IGNORE_ATTRS = {
 # Dynamic templates allow for matching unmapped field names using patterns,
 # and are evaluated in order. Once one field matches, the remaining
 # templates are ignored.
-DYNAMIC_TEMPLATES = OrderedDict()
-DYNAMIC_TEMPLATES["raw_expression"] = {  # Attrs ending in "_EXPR" are generated during
-    "match": r"*_EXPR",  # ad conversion for expressions that cannot be evaluated
-    "mapping": {"type": "keyword", "ignore_above": MAX_KEYWORD_LEN},
-}
-DYNAMIC_TEMPLATES["date_attrs"] = {  # Attrs ending in "Date" are usually timestamps
-    "match": r"*Date",
-    "mapping": {"type": "date", "format": "epoch_second"},
-}
-DYNAMIC_TEMPLATES["provisioned_attrs"] = {  # Attrs ending in "Provisioned" are
-    "match": r"*Provisioned",  # resource numbers
-    "mapping": {"type": "long"},
-}
-DYNAMIC_TEMPLATES["num_attrs"] = {  # Attrs starting with Num are usually numbers
-    "match_pattern": "regex",
-    "match": r"Num[A-Z].*",
-    "mapping": {"type": "long"},
-}
-DYNAMIC_TEMPLATES["stats_attrs"] = {  # Attrs ending with Stats are usually
-    "match_pattern": "regex",  # ClassAds containing floating point numbers
-    "match": r".*Stats\..*",
-    "mapping": {"type": "double"},
-}
-DYNAMIC_TEMPLATES["counts_attrs"] = {  # Attrs ending with Counts are usually
-    "match_pattern": "regex",  # ClassAds containing numbers
-    "match": r".*Counts\..*",
-    "mapping": {"type": "long"},
-}
-DYNAMIC_TEMPLATES["resource_request_attrs"] = {  # Attrs starting with "Request" are
-    "match_pattern": "regex",  # usually resource numbers
-    "match": r"^Request[A-Z].*$",
-    "mapping": {"type": "long"},
-}
-DYNAMIC_TEMPLATES["target_bool_attrs"] = {  # Attrs starting with "Want", "Has", or
-    "match_pattern": "regex",  # "Is" are usually boolean checks
-    "match": r"^(Want|Has|Is)[A-Z_].*$",
-    "mapping": {"type": "boolean"},
-}
-DYNAMIC_TEMPLATES["DEFAULT"] = {  # DEFAULT MAPPING - will be evaluated last
-    "match_mapping_type": "string",  # Store unknown attrs as indexed keywords
-    "mapping": {"type": "keyword", "ignore_above": MAX_KEYWORD_LEN},  # https://www.elastic.co/guide/en/elasticsearch/reference/7.17/tune-for-disk-usage.html#default-dynamic-string-mapping
-}
+DYNAMIC_TEMPLATES = [
+    {"raw_expression": {  # Attrs ending in "_EXPR" are generated during
+        "match": r"*_EXPR",  # ad conversion for expressions that cannot be evaluated
+        "mapping": {"type": "keyword", "ignore_above": MAX_KEYWORD_LEN},
+    }},
+    {"date_attrs": {  # Attrs ending in "Date" are usually timestamps
+        "match": r"*Date",
+        "mapping": {"type": "date", "format": "epoch_second"},
+    }},
+    {"provisioned_attrs": {  # Attrs ending in "Provisioned" are
+        "match": r"*Provisioned",  # resource numbers
+        "mapping": {"type": "long"},
+    }},
+    {"num_attrs": {  # Attrs starting with Num are usually numbers
+        "match_pattern": "regex",
+        "match": r"Num[A-Z].*",
+     "mapping": {"type": "long"},
+    }},
+    {"stats_attrs": {  # Attrs ending with Stats are usually
+        "match_pattern": "regex",  # ClassAds containing floating point numbers
+        "match": r".*Stats\..*",
+        "mapping": {"type": "double"},
+    }},
+    {"counts_attrs": {  # Attrs ending with Counts are usually
+        "match_pattern": "regex",  # ClassAds containing numbers
+        "match": r".*Counts\..*",
+        "mapping": {"type": "long"},
+    }},
+    {"resource_request_attrs": {  # Attrs starting with "Request" are
+        "match_pattern": "regex",  # usually resource numbers
+        "match": r"^Request[A-Z].*$",
+        "mapping": {"type": "long"},
+    }},
+    {"target_bool_attrs": {  # Attrs starting with "Want", "Has", or
+        "match_pattern": "regex",  # "Is" are usually boolean checks
+        "match": r"^(Want|Has|Is)[A-Z_].*$",
+        "mapping": {"type": "boolean"},
+    }},
+    {"DEFAULT": {  # DEFAULT MAPPING - will be evaluated last
+        "match_mapping_type": "string",  # Store unknown attrs as indexed keywords
+        "mapping": {"type": "keyword", "ignore_above": MAX_KEYWORD_LEN},  # https://www.elastic.co/guide/en/elasticsearch/reference/7.17/tune-for-disk-usage.html#default-dynamic-string-mapping
+    }}
+]
