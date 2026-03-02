@@ -668,8 +668,8 @@ def get_config(argv=None):
         args.custom_ignore_attrs = set(re.split(r"[\s,]+", args.custom_ignore_attrs.strip()))
 
     # Read JSON files
-    for arg in ["custom_field_properties", "custom_dynamic_templates", "custom_ignore_attrs", "custom_index_settings"]:
-        if arg in args_dict and args_dict[arg] is not None:
+    for arg in ["custom_field_properties", "custom_dynamic_templates", "custom_index_settings"]:
+        if args_dict.get(arg) is not None:
             try:
                 with args_dict[arg].open("r") as f:
                     try:
