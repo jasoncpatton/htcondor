@@ -15,8 +15,6 @@
 
 import logging
 
-from collections import OrderedDict
-
 
 def get_ignore_attrs(custom_mappings={}, custom_ignore_attrs=set(), default_ignore_attrs=set()) -> set:
     # First, duplicate lowercase version of defaults

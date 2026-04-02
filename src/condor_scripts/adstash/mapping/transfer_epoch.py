@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections import OrderedDict
-
 from adstash.mapping.common import MAX_KEYWORD_LEN, METADATA_MAPPING, OTHER_MAPPING_SETTINGS
 
 
@@ -105,26 +103,27 @@ NESTED_ATTRS = {
     "OutputPluginInvocations",
 }
 
-DYNAMIC_TEMPLATES = OrderedDict()
-DYNAMIC_TEMPLATES["raw_expression"] = {  # Attrs ending in "_EXPR" are generated during
-    "match": r"*_EXPR",  # ad conversion for expressions that cannot be evaluated
-    "mapping": {"type": "text", "norms": "false", "index": "false"},
-}
-DYNAMIC_TEMPLATES["date_attrs"] = {  # Attrs ending in "Date" are usually timestamps
-    "match": r"*Date",
-    "mapping": {"type": "date", "format": "epoch_second"},
-}
-DYNAMIC_TEMPLATES["target_bool_attrs"] = {  # Attrs starting with "Want", "Has", or
-    "match_pattern": "regex",  # "Is" are usually boolean checks
-    "match": r"^(Want|Has|Is)[A-Z_].*$",
-    "mapping": {"type": "boolean"},
-}
-DYNAMIC_TEMPLATES["plugin_invocations"] = {
-    "match_pattern": "regex",
-    "match": r"(In|Out)putPluginInvocations\.*$",
-    "mapping": {"type": "object", "dynamic": True},
-}
-DYNAMIC_TEMPLATES["DEFAULT"] = {  # DEFAULT MAPPING - will be evaluated last
-    "match_mapping_type": "string",  # Store unknown attrs as indexed keywords
-    "mapping": {"type": "keyword", "ignore_above": MAX_KEYWORD_LEN},  # https://www.elastic.co/guide/en/elasticsearch/reference/7.17/tune-for-disk-usage.html#default-dynamic-string-mapping
-}
+DYNAMIC_TEMPLATES = [
+    {"raw_expression": {  # Attrs ending in "_EXPR" are generated during
+        "match": r"*_EXPR",  # ad conversion for expressions that cannot be evaluated
+        "mapping": {"type": "text", "norms": "false", "index": "false"},
+    }},
+    {"date_attrs": {  # Attrs ending in "Date" are usually timestamps
+        "match": r"*Date",
+        "mapping": {"type": "date", "format": "epoch_second"},
+    }},
+    {"target_bool_attrs": {  # Attrs starting with "Want", "Has", or
+        "match_pattern": "regex",  # "Is" are usually boolean checks
+        "match": r"^(Want|Has|Is)[A-Z_].*$",
+        "mapping": {"type": "boolean"},
+    }},
+    {"plugin_invocations": {
+        "match_pattern": "regex",
+        "match": r"(In|Out)putPluginInvocations\.*$",
+        "mapping": {"type": "object", "dynamic": True},
+    }},
+    {"DEFAULT": {  # DEFAULT MAPPING - will be evaluated last
+        "match_mapping_type": "string",  # Store unknown attrs as indexed keywords
+        "mapping": {"type": "keyword", "ignore_above": MAX_KEYWORD_LEN},  # https://www.elastic.co/guide/en/elasticsearch/reference/7.17/tune-for-disk-usage.html#default-dynamic-string-mapping
+    }}
+]

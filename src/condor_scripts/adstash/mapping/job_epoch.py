@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from adstash.mapping.common import MAX_KEYWORD_LEN
+
 from adstash.mapping.job import (
     INDEXED_KEYWORD_ATTRS,
     NON_INDEXED_KEYWORD_ATTRS,
