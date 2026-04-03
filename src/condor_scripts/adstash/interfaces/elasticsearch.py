@@ -28,7 +28,7 @@ except ModuleNotFoundError as err:
     _ES_MODULE_FOUND = False
     _ES_MODULE_NOT_FOUND_ERROR = err
 
-from adstash.utils import get_host_port
+from adstash.utils import get_host_port, classad_json_serializer
 from adstash.interfaces.generic import GenericInterface
 
 ES8 = (8,0,0)
@@ -215,7 +215,7 @@ class ElasticsearchInterface(GenericInterface):
             doc["metadata"] = metadata  # bolt on the metadata
             action = {"index": {"_id": doc_id}}  # index the doc w/ this id
             body.append(json.dumps(action))
-            body.append(json.dumps(doc, sort_keys=True))
+            body.append(json.dumps(doc, sort_keys=True, default=classad_json_serializer))
         return "\n".join(body)
 
 

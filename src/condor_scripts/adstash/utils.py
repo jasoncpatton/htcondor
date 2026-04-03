@@ -24,6 +24,7 @@ import tempfile
 import logging.handlers
 
 import htcondor2 as htcondor
+import classad2 as classad
 
 from pathlib import Path
 
@@ -216,3 +217,25 @@ def atomic_write(data, filepath):
             os.unlink(tmpfile.name)
         except Exception:
             pass
+
+
+def classad_json_serializer(obj):
+    # convert ClassAds to dict
+    if isinstance(obj, classad.ClassAd):
+        out = {}
+        for k in obj:
+            # explicitly convert Error and Undefined to None
+            # (otherwise they will get serialized to ints)
+            v = obj.eval(k)
+            if isinstance(obj.eval(k), classad.Value):
+                out[k] = None
+            else:
+                out[k] = v
+        return out
+    # convert ExprTrees to their string repr
+    if isinstance(obj, classad.ExprTree):
+        return str(obj)
+    # convert Error and Undefined to None
+    if isinstance(obj, classad.Value):
+        return None
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")

@@ -21,6 +21,7 @@ import logging
 from functools import lru_cache
 from collections import defaultdict, OrderedDict
 
+from adstash.utils import classad_json_serializer
 from adstash.mapping.common import MAX_KEYWORD_LEN
 from adstash.mapping.functions import get_ignore_attrs, merge_properties, merge_dynamic_templates
 
@@ -217,24 +218,17 @@ class GenericClassAdConverter():
             if isinstance(value, (dict, classad.ClassAd)):
 
                 # Make sure the mapping is expected
-                if known_mappings and field_type is not dict:
+                if known_mappings and field_type not in (dict, str,):
                     self.log_once(f"Could not convert {field_name} to {field_type}, got a dict-like")
                     continue
 
                 # If we know this to be a string, try to make it a JSON blob
                 if known_mappings and field_type is str:
-                    if isinstance(value, classad.ClassAd):
-                        try:
-                            field_value = value.printJson()
-                        except Exception:
-                            self.log_once(f"Failed to convert ClassAd object in {attr} to JSON")
-                            continue
-                    else:
-                        try:
-                            field_value = json.dumps(value)
-                        except Exception:
-                            self.log_once(f"Failed to convert dict-like object in {attr} to JSON")
-                            continue
+                    try:
+                        field_value = json.dumps(value, default=classad_json_serializer)
+                    except Exception:
+                        self.log_once(f"Failed to convert dict-like object in {attr} to JSON")
+                        continue
 
                 else:  # Otherwise recursively convert it, flattening the namespace
                     if not known_mappings:  # Preserve original case if we don't know what this is

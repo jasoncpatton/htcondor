@@ -18,6 +18,7 @@ import json
 
 from pathlib import Path
 
+from adstash.utils import classad_json_serializer
 from adstash.interfaces.generic import GenericInterface
 
 
@@ -38,9 +39,9 @@ class JSONFileInterface(GenericInterface):
             body.append(doc)
 
         if self.json_legacy:
-            return "".join([json.dumps(doc, indent=2, sort_keys=True) for doc in body])
+            return "".join([json.dumps(doc, indent=2, sort_keys=True, default=classad_json_serializer) for doc in body])
 
-        return json.dumps(body, indent=2, sort_keys=True)
+        return json.dumps(body, indent=2, sort_keys=True, default=classad_json_serializer)
 
 
     def post_ads(self, ads, metadata={}, **kwargs):

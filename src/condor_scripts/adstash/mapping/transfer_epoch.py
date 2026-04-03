@@ -81,6 +81,7 @@ INT_ATTRS = {
 }
 
 DATE_ATTRS = {
+    "@timestamp",
     "AttemptEndTime",
     "EpochWriteDate",
     "RecordTime",
