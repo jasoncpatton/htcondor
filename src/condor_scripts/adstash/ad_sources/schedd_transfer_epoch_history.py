@@ -28,7 +28,10 @@ import classad2 as classad
 class ScheddTransferEpochHistorySource(GenericAdSource):
 
 
-    def fetch_ads(self, schedd_ad, max_ads=10000):
+    def fetch_ads(self, schedd_ad, max_ads=10000, projection=set()):
+
+        if projection:
+            logging.warning(f"Custom projections are not supported for transfer epoch history")
 
         history_kwargs = {}
         if max_ads > 0:
