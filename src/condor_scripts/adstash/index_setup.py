@@ -61,7 +61,6 @@ def set_index_mappings(
     default_properties = get_default_mapping_properties(AD_TYPE_DEFAULT_MAPPINGS[ad_type])
     default_templates = AD_TYPE_DEFAULT_MAPPINGS[ad_type].DYNAMIC_TEMPLATES
 
-    mappings = existing_mappings.copy()
     mappings["properties"] = merge_properties(existing_properties, custom_properties, default_properties)
     mappings["dynamic_templates"] = merge_dynamic_templates(default_templates, custom_templates)
 

@@ -90,7 +90,9 @@ DATE_ATTRS = {
 }
 
 BOOL_ATTRS = {
+    "CacheHit",
     "FinalAttempt",
+    "NoPluginResults",
     "Retryable",
     "TransferSuccess",
 }
@@ -120,7 +122,7 @@ DYNAMIC_TEMPLATES = [
     }},
     {"plugin_invocations": {
         "match_pattern": "regex",
-        "match": r"(In|Out)putPluginInvocations\.*$",
+        "match": r"(In|Out)putPluginInvocations\..+$",
         "mapping": {"type": "object", "dynamic": True},
     }},
     {"DEFAULT": {  # DEFAULT MAPPING - will be evaluated last

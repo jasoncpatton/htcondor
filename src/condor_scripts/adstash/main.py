@@ -174,7 +174,7 @@ def adstash(args):
 
                     checkpoint_queue.put(None)
                     logging.warning(f"Joining the {daemon_type} checkpoint queue.")
-                    ckpt_updater.join(timeout=(len(daemon_ads) * args.schedd_history_timeout))
+                    ckpt_updater.join(timeout=(len(daemon_ads) * vars(args)[f"{daemon_type}_history_timeout"]))
                     logging.warning(f"Shutting down the {daemon_type} checkpoint queue.")
                     ckpt_updater.terminate()
                     manager.shutdown()

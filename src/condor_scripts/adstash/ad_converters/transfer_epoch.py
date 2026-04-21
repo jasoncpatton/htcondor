@@ -44,11 +44,11 @@ class TransferEpochClassAdConverter(GenericClassAdConverter):
         )
 
     def expand_plugin_result_ads(self, ads, my_attr_name=None):
-        debug_results = []
-        error_results = iter(())
-        result = {}
         file_number = 0
         for ad in ads:
+            result = {}
+            debug_results = []
+            error_results = iter(())
             result["TransferFileNumber"] = file_number
             file_number += 1
             for attr, value in ad.items():
@@ -81,7 +81,7 @@ class TransferEpochClassAdConverter(GenericClassAdConverter):
                         try:
                             yield debug_result | result | error_result
                         except TypeError:  # backwards compat
-                            yield {**debug_result, **result}
+                            yield {**debug_result, **result, **error_result}
                     else:  # otherwise only add identifying attrs
                         for attr in ("TransferProtocol", "TransferType", "TransferUrl"):
                             debug_result[attr] = result.get(attr)
@@ -133,7 +133,7 @@ class TransferEpochClassAdConverter(GenericClassAdConverter):
                     continue
                 if attr.lower().startswith("transfer"):
                     attr = f"Attempt{attr[len('transfer'):]}"
-                result.update(self.convert_attr_to_dict(attr, value, ad))
+                attempt_result.update(self.convert_attr_to_dict(attr, value, ad))
             try:
                 yield result | attempt_result
             except TypeError:  # backwards compat
@@ -154,7 +154,7 @@ class TransferEpochClassAdConverter(GenericClassAdConverter):
                     error_result.update(self.convert_attr_to_dict(attr, value, ad))
             yield error_result
 
-    def convert_ad_to_dict(self, ad, parent_attr=""):
+    def convert_transfer_ad_to_dicts(self, ad, parent_attr=""):
         """
         Convert a transfer epoch ClassAd and yield a document (dict) with flattened objects.
         Multiple docs could be yielded per transfer epoch ClassAd.
@@ -174,20 +174,22 @@ class TransferEpochClassAdConverter(GenericClassAdConverter):
 
             # 3. Pop out plugin result lists
             if attr.endswith("PluginResultList"):
-                plugin_results.append(self.expand_plugin_result_ads(value))
+                plugin_results.append(self.expand_plugin_result_ads(value, my_attr_name=attr))
 
             # 4. Convert top-level attrs
             else:
                 doc.update(self.convert_attr_to_dict(attr, value, ad))
 
         # 5. Loop over plugin results, append and yield them
-        for plugin_result in chain(*plugin_results or [{}]):
-            try:
-                yield doc | plugin_result
-            except TypeError:  # backwards compat
-                yield {**doc, **plugin_result}
-
-        return doc
+        if not plugin_results:
+            doc["NoPluginResults"] = True
+            yield doc
+        else:
+            for plugin_result in chain(*plugin_results):
+                try:
+                    yield doc | plugin_result
+                except TypeError:  # backwards compat
+                    yield {**doc, **plugin_result}
 
     def get_unique_doc_id(self, doc):
         """
@@ -205,16 +207,17 @@ class TransferEpochClassAdConverter(GenericClassAdConverter):
 
     def add_additional_fields(self, doc, ad):
         # Python None converts to JSON null. Helpfully, Elasticsearch will ignore null values.
-        doc["ScheddName"] = ad.get("GlobalJobId", "").split("#", maxsplit=1)[0] or None
+        if "ScheddName" not in doc:
+            doc["ScheddName"] = ad.get("GlobalJobId", "").split("#", maxsplit=1)[0] or None
         doc["ClusterId"] = ad.get("ClusterId", ad.get("GlobalJobId", "#.").split("#")[1].split(".")[0]) or None
         doc["ProcId"] = ad.get("ProcId", ad.get("GlobalJobId", "#.").split("#")[1].split(".")[-1]) or None
         doc["StartdSlot"] = ad.get("RemoteHost", "").split("@", maxsplit=1)[0] or None
         doc["StartdName"] = ad.get("RemoteHost", "").split("@", maxsplit=1)[-1] or None
 
-    def convert_ad_to_doc(self, ad):
+    def convert_transfer_ad_to_docs(self, ad):
 
         # Do the bulk of the conversions
-        for doc in self.convert_ad_to_dict(ad):
+        for doc in self.convert_transfer_ad_to_dicts(ad):
 
             # Add timestamps
             doc["@timestamp"] = doc["RecordTime"] = self.get_timestamp(ad)

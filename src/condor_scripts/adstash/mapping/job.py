@@ -585,7 +585,6 @@ IGNORE_ATTRS = {
     "Env",
     "EnvDelim",
     "Environment",
-    "ExecutableSize",
     "GceAccount",
     "GceAuthFile",
     "GceJsonFile",
@@ -650,12 +649,12 @@ DYNAMIC_TEMPLATES = [
     }},
     {"stats_attrs": {  # Attrs ending with Stats are usually
         "match_pattern": "regex",  # ClassAds containing floating point numbers
-        "match": r".*Stats\..*",
+        "match": r".+Stats\..+",
         "mapping": {"type": "double"},
     }},
     {"counts_attrs": {  # Attrs ending with Counts are usually
         "match_pattern": "regex",  # ClassAds containing numbers
-        "match": r".*Counts\..*",
+        "match": r".+Counts\..+",
         "mapping": {"type": "long"},
     }},
     {"resource_request_attrs": {  # Attrs starting with "Request" are

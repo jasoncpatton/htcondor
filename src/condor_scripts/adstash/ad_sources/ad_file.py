@@ -50,7 +50,7 @@ class FileAdSource(GenericAdSource):
         except IOError as e:
             logging.error(f"Could not read {ad_file}: {str(e)}")
             return
-        except Exception:
+        except Exception as e:
             logging.exception(f"Error while reading {ad_file} ({str(e)}), displaying traceback.")
             return
 

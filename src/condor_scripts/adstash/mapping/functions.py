@@ -32,6 +32,7 @@ def flatten_mapping_properties(properties: dict, parent="") -> dict:
         if parent:
             k = f"{parent}.{k}"
         if "properties" in v:  # object containing other properties
+            v = v.copy()  # avoid mutating the original mapping
             flattened_properties.update(flatten_mapping_properties(v.pop("properties"), k))
             if not "type" in v:  # make sure objects are explicitly defined
                 v["type"] = "object"

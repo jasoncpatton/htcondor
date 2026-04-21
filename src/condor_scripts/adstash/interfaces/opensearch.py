@@ -96,7 +96,3 @@ class OpenSearchInterface(ElasticsearchInterface):
             client.indices.put_mapping(index=index, body=body)
         else:
             client.indices.put_mapping(index=index, **mappings)
-        if self.log_mappings and self.log_dir:
-            mappings_file = self.log_dir / "condor_adstash_opensearch_last_mappings.json"
-            logging.debug(f"Writing updated mappings to {mappings_file}.")
-            json.dump(mappings, open(mappings_file, "w"), indent=2)

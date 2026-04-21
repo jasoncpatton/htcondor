@@ -58,15 +58,6 @@ class ScheddTransferEpochHistorySource(GenericAdSource):
         schedd_checkpoint = None
         ads_posted = 0
         for ad in ads:
-            try:
-                dict_ads = converter.convert_ad_to_doc(ad)
-            except Exception as e:
-                message = f"Failure when converting document in {schedd_ad['name']} transfer epoch history: {str(e)}"
-                exc = traceback.format_exc()
-                message += f"\n{exc}"
-                logging.warning(message)
-                continue
-
             # Unfortunately, the schedd history is in reverse chronological order,
             # therefore the checkpoint should be set to the first ad that is returned.
             # Here, we assume that the interface is responsible for de-duping ads
@@ -78,20 +69,27 @@ class ScheddTransferEpochHistorySource(GenericAdSource):
                 for attr in ("EpochWriteDate", "ClusterId", "ProcId", "NumShadowStarts",):
                     if attr in ad:
                         schedd_checkpoint[attr] = ad[attr]
-            for dict_ad in dict_ads:
-                dict_ad["ScheddName"] = schedd_ad["name"]
-                chunk.append((converter.get_unique_doc_id(dict_ad), dict_ad,))
+            try:
+                for dict_ad in converter.convert_transfer_ad_to_docs(ad):
+                    dict_ad["ScheddName"] = schedd_ad["Name"]
+                    chunk.append((converter.get_unique_doc_id(dict_ad), dict_ad,))
+            except Exception as e:
+                message = f"Failure when converting document in {schedd_ad['Name']} transfer epoch history: {str(e)}"
+                exc = traceback.format_exc()
+                message += f"\n{exc}"
+                logging.warning(message)
+                continue
 
             if (chunk_size > 0) and (len(chunk) >= chunk_size):
                 logging.debug(f"Posting {len(chunk)} transfer epoch ads from {schedd_ad['Name']}.")
-                result = interface.post_ads(chunk, metadata=metadata, ad_source=self, **kwargs)
+                result = interface.post_ads(chunk, metadata=metadata, **kwargs)
                 ads_posted += result["success"]
                 yield None  # don't update checkpoint yet, per note above
                 chunk = []
 
         if len(chunk) > 0:
             logging.debug(f"Posting {len(chunk)} transfer epoch ads from {schedd_ad['Name']}.")
-            result = interface.post_ads(chunk, metadata=metadata, ad_source=self, **kwargs)
+            result = interface.post_ads(chunk, metadata=metadata, **kwargs)
             ads_posted += result["success"]
 
         endtime = time.time()

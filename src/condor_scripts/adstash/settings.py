@@ -25,7 +25,7 @@ DEFAULT_INITIAL_SETTINGS = {
         "mapping": {
             "ignore_malformed": True,  # https://www.elastic.co/guide/en/elasticsearch/reference/7.17/ignore-malformed.html#ignore-malformed-setting
         },
-        "refresh_interval": "30s",  # https://www.elastic.co/guide/en/elasticsearch/reference/7.17/tune-for-indexing-speed.html#_unset_or_increase_the_refresh_interval
+        "refresh_interval": "60s",  # https://www.elastic.co/guide/en/elasticsearch/reference/7.17/tune-for-indexing-speed.html#_unset_or_increase_the_refresh_interval
     }
 }
 
@@ -45,7 +45,7 @@ DEFAULT_ILM_POLICY = {
                 }
             },
             "warm": {
-                "min_age": "100d",  # rollover approx. quarterly
+                "min_age": "120d",  # approx. one quarter after first doc ingestion
                 "actions": {
                     "forcemerge": {
                         "max_num_segments": 1  # merge down to single segment
@@ -53,7 +53,7 @@ DEFAULT_ILM_POLICY = {
                 }
             },
             "cold": {
-                "min_age": "400d",  # rollover after approx. year
+                "min_age": "400d",  # approx. one year after first doc ingestion (extra buffer for annual reporting)
                 "actions": {
                     "set_priority": {
                         "priority": 0
@@ -164,15 +164,19 @@ class SearchEngineSettings():
             logging.warning(f"{output_directory} does not exist, creating it for you")
             output_directory.mkdir(parents=True)
 
+        curl_put = 'curl -X PUT -u "${ELASTIC_USER}:${ELASTIC_PASSWORD}" -H "Content-Type: application/json"'
         readme = {
             "ilm": f"""ILM policy ({{filename}}) should be PUT to _ilm/policy/{ilm_policy_name}
 See: https://www.elastic.co/docs/api/doc/elasticsearch/operation/operation-ilm-put-lifecycle
 A default ILM policy was written by condor_adstash, inspect the policy first
-and then consider adjusting it now or (e.g. via Kibana) later.""",
+and then consider adjusting it now or (e.g. via Kibana) later.
+  {curl_put} "${{ELASTIC_BASE_URL}}/_ilm/policy/{ilm_policy_name}" -d @{{filename}}""",
             "template": f"""Index template ({{filename}}) should be PUT to _index_template/{self.index_template_name}
-See: https://www.elastic.co/docs/api/doc/elasticsearch/operation/operation-indices-put-index-template""",
+See: https://www.elastic.co/docs/api/doc/elasticsearch/operation/operation-indices-put-index-template
+  {curl_put} "${{ELASTIC_BASE_URL}}/_index_template/{self.index_template_name}" -d @{{filename}}""",
             "index": f"""Initial index ({{filename}}) should be PUT to {index_name}
-See: https://www.elastic.co/docs/api/doc/elasticsearch/operation/operation-indices-create"""
+See: https://www.elastic.co/docs/api/doc/elasticsearch/operation/operation-indices-create
+  {curl_put} "${{ELASTIC_BASE_URL}}/{index_name}" -d @{{filename}}"""
         }
         readme_path = output_directory / "README"
         if readme_path.exists():
@@ -183,7 +187,7 @@ See: https://www.elastic.co/docs/api/doc/elasticsearch/operation/operation-indic
 Failure to do so may result in templates and ILM policies not applying.\n\n""")
             for obj_type in ["ilm", "template", "index"]:
                 if obj_type in files:
-                    f.write(readme[obj_type].format(filename=files[obj_type]["name"]))
+                    f.write(readme[obj_type].replace("{filename}", files[obj_type]["name"]))
                     f.write("\n\n")
 
         for obj in files.values():

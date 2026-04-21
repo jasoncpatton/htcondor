@@ -158,6 +158,10 @@ class GenericClassAdConverter():
             elif dt_name == "DEFAULT":
                 match_type = "default"
                 match_pattern = ""
+            elif match_pattern.count("*") > 1:
+                # Only a single * wildcard is supported in our implementation, even though
+                # multiple * wildcards are valid in Elasticsearch dynamic templates.
+                logging.warning(f"Dynamic template {dt_name} has multiple * wildcards in match pattern '{match_pattern}', which is not supported and will never match.")
             matchers[dt_name] = {
                 "match_type": match_type,
                 "match_pattern": match_pattern,
@@ -181,7 +185,7 @@ class GenericClassAdConverter():
                 field_type = dt["field_type"]
                 self.log_once(f"Attr {attr} matched dynamic template {dt_name}", logging.info)
                 break
-            if dt["match_type"] == "wildcard":
+            if dt["match_type"] == "wildcard" and "*" in dt["match_pattern"]:
                 left, right = dt["match_pattern"].split("*", maxsplit=1)
                 if attr.startswith(left) and attr.endswith(right):
                     field_name = attr
