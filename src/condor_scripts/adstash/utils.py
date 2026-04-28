@@ -54,6 +54,8 @@ def get_schedds(args):
         for schedd in schedds:
             if args.schedds and not (schedd["Name"] in args.schedds.split(",")):
                 continue
+            if args.ignore_schedds and schedd["Name"] in args.ignore_schedds.split(","):
+                continue
             schedd["MyPool"] = host
             try:
                 schedd_ads[schedd["Name"]] = schedd
@@ -94,6 +96,8 @@ def get_startds(args=None):
             for slot_ad in slot_ads:
                 machine = slot_ad["Machine"]
                 if machine in startd_ads or (startd_allow_list is not None and machine not in startd_allow_list):
+                    continue
+                if args.ignore_startds and machine in args.ignore_startds.split(","):
                     continue
 
                 # Remote history bindings only exist in startds running 8.9.7+

@@ -22,6 +22,7 @@ NON_INDEXED_TEXT_ATTRS = {
     "AttemptError",
     "ErrorString",
     "TransferError",
+    "TransferError1",
 }
 
 INDEXED_KEYWORD_ATTRS = {
@@ -29,6 +30,7 @@ INDEXED_KEYWORD_ATTRS = {
     "ErrorType",
     "ErrorMessage",
     "FailedName",
+    "FailedServer",
     "FailureType",
     "DebugErrorType",
     "GLIDEIN_ResourceName",
@@ -39,6 +41,8 @@ INDEXED_KEYWORD_ATTRS = {
     "Owner",
     "PelicanClientVersion",
     "ProjectName",
+    "PluginVersion",
+    "RemoteHost",
     "ScheddName",
     "ServerVersion",
     "StartdName",
@@ -67,6 +71,7 @@ INT_ATTRS = {
     "Attempts",
     "AttemptFileBytes",
     "ClusterId",
+    "DataAge",
     "ErrorCode",
     "LibcurlReturnCode",
     "NumShadowStarts",
@@ -77,7 +82,6 @@ INT_ATTRS = {
     "TransferHttpStatusCode",
     "TransferTotalBytes",
     "TransferTries",
-    "DataAge",
 }
 
 DATE_ATTRS = {
@@ -92,18 +96,24 @@ DATE_ATTRS = {
 BOOL_ATTRS = {
     "CacheHit",
     "FinalAttempt",
+    "IsRetryable",
+    "IsRetryable1",
     "NoPluginResults",
+    "PluginLaunched",
     "Retryable",
     "TransferSuccess",
 }
 
 OBJECT_ATTRS = {
     "ClientChecksums",
+    "ServerChecksums",
+    "DirectorDecision",
 }
 
 NESTED_ATTRS = {
     "InputPluginInvocations",
     "OutputPluginInvocations",
+    "CheckpointPluginInvocations",
 }
 
 DYNAMIC_TEMPLATES = [
@@ -117,13 +127,8 @@ DYNAMIC_TEMPLATES = [
     }},
     {"target_bool_attrs": {  # Attrs starting with "Want", "Has", or
         "match_pattern": "regex",  # "Is" are usually boolean checks
-        "match": r"^(Want|Has|Is)[A-Z_].*$",
+        "match": r"(?i)^(Want|Has|Is).+$",
         "mapping": {"type": "boolean"},
-    }},
-    {"plugin_invocations": {
-        "match_pattern": "regex",
-        "match": r"(In|Out)putPluginInvocations\..+$",
-        "mapping": {"type": "object", "dynamic": True},
     }},
     {"DEFAULT": {  # DEFAULT MAPPING - will be evaluated last
         "match_mapping_type": "string",  # Store unknown attrs as indexed keywords

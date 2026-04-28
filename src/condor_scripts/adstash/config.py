@@ -78,7 +78,9 @@ def get_htcondor_config(name="ADSTASH"):
         "threads": p.get(f"{name}_NUM_THREADS"),
         "collectors": p.get(f"{name}_READ_POOLS"),
         "schedds": p.get(f"{name}_READ_SCHEDDS"),
+        "ignore_schedds": p.get(f"{name}_IGNORE_SCHEDDS"),
         "startds": p.get(f"{name}_READ_STARTDS"),
+        "ignore_startds": p.get(f"{name}_IGNORE_STARTDS"),
         "read_schedd_history": p.get(f"{name}_SCHEDD_HISTORY"),
         "read_startd_history": p.get(f"{name}_STARTD_HISTORY"),
         "read_schedd_job_epoch_history": p.get(f"{name}_SCHEDD_JOB_EPOCH_HISTORY"),
@@ -151,7 +153,9 @@ def get_environment_config(name="ADSTASH"):
         "threads": env.get(f"{name}_NUM_THREADS"),
         "collectors": env.get(f"{name}_READ_POOLS"),
         "schedds": env.get(f"{name}_READ_SCHEDDS"),
+        "ignore_schedds": env.get(f"{name}_IGNORE_SCHEDDS"),
         "startds": env.get(f"{name}_READ_STARTDS"),
+        "ignore_startds": env.get(f"{name}_IGNORE_STARTDS"),
         "read_schedd_history": env.get(f"{name}_SCHEDD_HISTORY"),
         "read_startd_history": env.get(f"{name}_STARTD_HISTORY"),
         "read_schedd_job_epoch_history": env.get(f"{name}_SCHEDD_JOB_EPOCH_HISTORY"),
@@ -455,9 +459,23 @@ def get_config(argv=None):
         ),
     )
     history_group.add_argument(
+        "--ignore_schedds",
+        help=(
+            "Comma-separated list of Schedd names to skip processing "
+            "[default is to process all Schedds located by Collectors]"
+        ),
+    )
+    history_group.add_argument(
         "--startds",
         help=(
             "Comma-separated list of Startd machines to process "
+            "[default is to process all Startds located by Collectors]"
+        ),
+    )
+    history_group.add_argument(
+        "--ignore_startds",
+        help=(
+            "Comma-separated list of Startd machines to skip processing "
             "[default is to process all Startds located by Collectors]"
         ),
     )

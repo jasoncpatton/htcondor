@@ -57,6 +57,7 @@ INDEXED_KEYWORD_ATTRS = {
     "BatchQueue",
     "CloudLabelNames",
     "Cmd",
+    "CommonInputFiles",
     "CompressFiles",
     "ConcurrencyLimits",
     "CondorPlatform",
@@ -64,6 +65,7 @@ INDEXED_KEYWORD_ATTRS = {
     "ContainerImage",
     "ContainerImageSource",
     "ContainerServiceNames",
+    "ContainerTargetDir",
     "CronDayOfMonth",
     "CronDayOfWeek",
     "CronHour",
@@ -161,6 +163,7 @@ INDEXED_KEYWORD_ATTRS = {
     "StarterIpAddr",
     "StarterPrincipal",
     "Status",
+    "SubmitVersion",
     "SubmitterGlobalJobId",
     "SubmitterGroup",
     "SubmitterNegotiatingGroup",
@@ -377,6 +380,7 @@ INT_ATTRS = {
     "RequestVirtualMemory",
     "ResidentSetSize_RAW",
     "ResidentSetSize",
+    "ScheddInterval",
     "ScratchDirFileCount",
     "StackSize",
     "StatsLifetime",
@@ -453,6 +457,7 @@ DATE_ATTRS = {
 
 BOOL_ATTRS = {
     "BufferFiles",
+    "ContainerIsCommon",
     "CurrentStatusUnknown",
     "DAG_InRecovery",
     "DAGLifetimeJob",
@@ -664,7 +669,7 @@ DYNAMIC_TEMPLATES = [
     }},
     {"target_bool_attrs": {  # Attrs starting with "Want", "Has", or
         "match_pattern": "regex",  # "Is" are usually boolean checks
-        "match": r"^(Want|Has|Is)[A-Z_].*$",
+        "match": r"(?i)^(Want|Has|Is).+$",
         "mapping": {"type": "boolean"},
     }},
     {"DEFAULT": {  # DEFAULT MAPPING - will be evaluated last

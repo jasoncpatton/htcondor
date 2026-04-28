@@ -31,6 +31,19 @@ import classad2 as classad
 _LAUNCH_TIME = int(time.time())
 
 
+def _normalize_target_bool_attr(attr: str) -> str:
+    attr = attr.lower()
+    prefix = next((x for x in ["want", "has", "is"] if attr.startswith(x)), "")
+    middle = "_" if len(attr) > len(prefix) and attr[len(prefix)] == "_" else ""
+    right = attr[len(prefix) + len(middle):]
+    return f"{prefix.capitalize()}{middle}{right.capitalize()}"
+
+
+DYNAMIC_TEMPLATE_FIELD_NAME_NORMALIZERS = {
+    "target_bool_attrs": _normalize_target_bool_attr,
+}
+
+
 def strict_bool(i):
     if isinstance(i, bool):
         return bool(i)
@@ -181,14 +194,14 @@ class GenericClassAdConverter():
         field_type = self.dynamic_templates_matchers["DEFAULT"]["field_type"]
         for dt_name, dt in self.dynamic_templates_matchers.items():
             if dt["match_type"] == "regex" and dt["match_pattern"].match(attr):
-                field_name = attr
+                field_name = DYNAMIC_TEMPLATE_FIELD_NAME_NORMALIZERS.get(dt_name, lambda x: x)(attr)
                 field_type = dt["field_type"]
                 self.log_once(f"Attr {attr} matched dynamic template {dt_name}", logging.info)
                 break
             if dt["match_type"] == "wildcard" and "*" in dt["match_pattern"]:
                 left, right = dt["match_pattern"].split("*", maxsplit=1)
                 if attr.startswith(left) and attr.endswith(right):
-                    field_name = attr
+                    field_name = DYNAMIC_TEMPLATE_FIELD_NAME_NORMALIZERS.get(dt_name, lambda x: x)(attr)
                     field_type = dt["field_type"]
                     self.log_once(f"Attr {attr} matched dynamic template {dt_name}", logging.info)
                     break
@@ -197,10 +210,14 @@ class GenericClassAdConverter():
                 self.log_once(f"Encountered new/unknown attr {attr}")
         return field_name, field_type
 
-    def convert_attr_to_dict(self, attr: str, value, full_ad: classad.ClassAd) -> dict:
+    def convert_attr_to_dict(self, attr: str, value, full_ad: classad.ClassAd, preserve_case: bool = False) -> dict:
         """
         Convert the given ClassAd attribute-value pair to a dict
         which can be merged into a document.
+
+        If preserve_case is True, the original attr name casing is used as the
+        field name when no mapping is found (instead of the lowercased DEFAULT).
+        Use this when recursing into a known object field.
         """
         doc = {}
 
@@ -211,15 +228,44 @@ class GenericClassAdConverter():
         # 2. Get the field name and field type mappings if unknown
         if not field_names_types:
             known_mappings = False
-            field_names_types = dict([self.map_unknown_field_type(attr)])
+            mapped_name, mapped_type = self.map_unknown_field_type(attr)
+            if preserve_case:
+                mapped_name = attr
+            field_names_types = {mapped_name: mapped_type}
 
         # 3. Map attr to all matching fields
         for field_name, field_type in field_names_types.items():
 
             field_value = None
 
-            # 4. Handle objects separately
-            if isinstance(value, (dict, classad.ClassAd)):
+            # 4. Handle lists (nested fields) separately
+            if isinstance(value, list):
+
+                if known_mappings and field_type is list:
+                    converted = []
+                    failed = False
+                    for item in value:
+                        try:
+                            item = json.loads(json.dumps(item, default=classad_json_serializer))
+                        except Exception:
+                            self.log_once(f"Failed to serialize item in {attr} to JSON")
+                            doc[field_name.lower()] = self.truncate(field_name.lower(), str(value))
+                            failed = True
+                            continue
+                        converted.append(item)
+                    if not (failed and field_name == field_name.lower()):
+                        doc[field_name] = converted
+                else:
+                    try:
+                        field_value = json.dumps(value, default=classad_json_serializer)
+                    except Exception:
+                        self.log_once(f"Failed to convert list in {attr} to JSON")
+                        field_value = str(value)
+                    doc[field_name.lower()] = self.truncate(field_name.lower(), field_value)
+                continue
+
+            # 5. Handle objects separately
+            elif isinstance(value, (dict, classad.ClassAd)):
 
                 # Make sure the mapping is expected
                 if known_mappings and field_type not in (dict, str,):
@@ -237,10 +283,10 @@ class GenericClassAdConverter():
                 else:  # Otherwise recursively convert it, flattening the namespace
                     if not known_mappings:  # Preserve original case if we don't know what this is
                         field_name = attr  # because it might match a dynamic template later.
-                    doc.update(self.convert_ad_to_dict(value, field_name))
+                    doc.update(self.convert_ad_to_dict(value, field_name, preserve_case=known_mappings))
                     continue  # Then at this point, this mapping is already done
 
-            # 5. Handle everything else
+            # 6. Handle everything else
             else:
 
                 # Evaluate any ClassAd expressions
@@ -275,6 +321,8 @@ class GenericClassAdConverter():
                     continue
 
                 try:
+                    if field_type is list and not isinstance(value, list):
+                        raise TypeError(f"expected a list")
                     field_value = field_type(value)
                 except Exception:
                     self.log_once(f"Failed to cast {attr} = {value} as a {field_type.__name__}")
@@ -284,19 +332,29 @@ class GenericClassAdConverter():
                 self.log_once(f"Failed to get a usable value for {attr}", logging.error)
                 continue
 
-            # 6. Truncate strings if necessary
-            if isinstance(field_value, str) and len(field_value) > MAX_KEYWORD_LEN:
-                self.log_once(f"Had to truncate value of {field_name} (original length {len(field_value)})")
-                field_value = f"{field_value[:MAX_KEYWORD_LEN-3]}..."
+            # 7. Truncate strings if necessary
+            field_value = self.truncate(field_name, field_value)
 
-            # 7. Store value
+            # 8. Store value
             doc[field_name] = field_value
 
         return doc
 
-    def convert_ad_to_dict(self, ad, parent_attr="") -> dict:
+    def truncate(self, field_name: str, value) -> str:
         """
-        Convert a ClassAd to a document (dict) with flattened objects
+        Shorten strings to MAX_KEYWORD_LEN if necessary
+        """
+        if isinstance(value, str) and len(value) > MAX_KEYWORD_LEN:
+            self.log_once(f"Had to truncate value of {field_name} (original length {len(value)})")
+            return f"{value[:MAX_KEYWORD_LEN-3]}..."
+        return value
+
+    def convert_ad_to_dict(self, ad, parent_attr="", preserve_case: bool = False) -> dict:
+        """
+        Convert a ClassAd to a document (dict) with flattened objects.
+
+        If preserve_case is True, unknown subfield names retain their original
+        casing rather than being lowercased by the DEFAULT dynamic template fallback.
         """
         doc = {}
 
@@ -316,7 +374,7 @@ class GenericClassAdConverter():
                 continue
 
             # 5. Convert attr
-            doc.update(self.convert_attr_to_dict(attr, value, ad))
+            doc.update(self.convert_attr_to_dict(attr, value, ad, preserve_case=preserve_case))
 
         return doc
 
