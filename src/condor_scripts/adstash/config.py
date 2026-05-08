@@ -371,6 +371,12 @@ def get_config(argv=None):
         help="Log level (CRITICAL/ERROR/WARNING/INFO/DEBUG) [default: %(default)s]",
     )
     parser.add_argument(
+        "-q", "--quiet",
+        action="store_true",
+        default=False,
+        help="Don't print out log messages",
+    )
+    parser.add_argument(
         "--threads",
         type=int,
         help=("Number of parallel threads for querying [default: %(default)d]"),

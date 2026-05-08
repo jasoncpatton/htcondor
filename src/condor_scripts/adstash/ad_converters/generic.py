@@ -44,14 +44,26 @@ DYNAMIC_TEMPLATE_FIELD_NAME_NORMALIZERS = {
 }
 
 
+def coerce_int(i):
+    try:
+        return int(i)
+    except (ValueError, TypeError):
+        pass
+    return round(float(i))
+
+
 def strict_bool(i):
     if isinstance(i, bool):
         return bool(i)
     if isinstance(i, str):
-        if str(i).lower() in {"1", "t", "true"}:
+        if i.lower() in {"1", "t", "true"}:
             return True
-        if str(i).lower() in {"0", "f", "false"}:
+        if i.lower() in {"0", "f", "false"}:
             return False
+        try:  # "1.0" / "0.0"
+            return strict_bool(float(i))
+        except ValueError:
+            pass
     if isinstance(i, (int, float)):
         if abs(i - 1) < 1e-8:  # allow for some tiny error
             return True
@@ -65,8 +77,8 @@ FIELD_TYPE_MAP = {
     "keyword": str,
     "float": float,
     "double": float,
-    "long": int,
-    "date": int,
+    "long": coerce_int,
+    "date": coerce_int,
     "boolean": strict_bool,
     "object": dict,
     "nested": list,

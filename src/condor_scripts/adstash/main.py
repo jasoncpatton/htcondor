@@ -163,14 +163,29 @@ def adstash(args):
                     ckpt_updater.start()
 
                     # Report processes if they timeout or error
+                    timeout = vars(args)[f"{daemon_type}_history_timeout"]
+                    succeeded = 0
+                    timed_out = []
+                    errored = []
                     for daemon_name, future in futures:
                         try:
-                            logging.warning(f"Waiting for {daemon_type.capitalize()} {daemon_name} to finish.")
-                            future.get(vars(args)[f"{daemon_type}_history_timeout"])
+                            if not future.ready():
+                                logging.warning(f"Waiting for {daemon_type.capitalize()} {daemon_name} to finish (timeout: {timeout}s).")
+                            future.get(timeout)
+                            succeeded += 1
                         except multiprocessing.TimeoutError:
                             logging.warning(f"Waited too long for {daemon_type.capitalize()} {daemon_name}; it may still complete in the background.")
+                            timed_out.append(daemon_name)
                         except Exception:
                             logging.exception(f"Error getting progress from {daemon_type.capitalize()} {daemon_name}.")
+                            errored.append(daemon_name)
+                    total = len(futures)
+                    summary = f"{succeeded}/{total} {daemon_type}s completed"
+                    if timed_out:
+                        summary += f", {len(timed_out)} timed out: {', '.join(timed_out)}"
+                    if errored:
+                        summary += f", {len(errored)} errored: {', '.join(errored)}"
+                    logging.warning(summary)
 
                     checkpoint_queue.put(None)
                     logging.warning(f"Joining the {daemon_type} checkpoint queue.")

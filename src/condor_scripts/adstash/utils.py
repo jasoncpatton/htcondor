@@ -171,11 +171,15 @@ def set_up_logging(args):
         filehandler.setFormatter(logging.Formatter(fmt=fmt, datefmt=datefmt))
         logger.addHandler(filehandler)
 
-    # Check if logging to stdout is worthwhile
-    if os.isatty(sys.stdout.fileno()):
-        streamhandler = logging.StreamHandler(stream=sys.stdout)
-        streamhandler.setFormatter(logging.Formatter(fmt=fmt, datefmt=datefmt))
-        logger.addHandler(streamhandler)
+    # Log to stdout unless suppressed by --quiet.
+    # Guard against stdout objects that don't support fileno() (e.g. StringIO in tests).
+    if not getattr(args, "quiet", False):
+        try:
+            streamhandler = logging.StreamHandler(stream=sys.stdout)
+            streamhandler.setFormatter(logging.Formatter(fmt=fmt, datefmt=datefmt))
+            logger.addHandler(streamhandler)
+        except Exception:
+            pass
 
 
 def collect_process_metadata():
