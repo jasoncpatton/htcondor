@@ -15,6 +15,7 @@
 
 import re
 import json
+import math
 import time
 import logging
 
@@ -72,11 +73,18 @@ def strict_bool(i):
     raise ValueError(f"The truth value of {i} is ambiguous")
 
 
+def finite_float(x):
+    v = float(x)
+    if not math.isfinite(v):
+        raise ValueError(f"Non-finite float value: {v}")
+    return v
+
+
 FIELD_TYPE_MAP = {
     "text": str,
     "keyword": str,
-    "float": float,
-    "double": float,
+    "float": finite_float,
+    "double": finite_float,
     "long": coerce_int,
     "date": coerce_int,
     "boolean": strict_bool,
@@ -131,7 +139,7 @@ class GenericClassAdConverter():
 
     def get_known_field_types(self, mapping: dict, parent_field_names=[]) -> defaultdict:
         '''
-        Build up a map of sets of known field names and types,
+        Build up a map of known field names and types,
         keyed on the lowercased attribute names. For example,
         if "lastremotewallclocktime" and "LastRemoteWallClockTime"
         are both defined in the mapping as keyword and long,
@@ -139,8 +147,8 @@ class GenericClassAdConverter():
         {
             ...
             "lastremotewallclocktime": {
-                ("lastremotewallclocktime": str),
-                ("LastRemoteWallClockTime": int),
+                "lastremotewallclocktime": str,
+                "LastRemoteWallClockTime": int,
             }
             ...
         }
@@ -149,19 +157,19 @@ class GenericClassAdConverter():
         {
             ...
             "numholdsbyreason.failedtocheckpoint": {
-                ("NumHoldsByReason.FailedToCheckpoint": int),
+                "NumHoldsByReason.FailedToCheckpoint": int,
             }
             ...
         }
         '''
-        known_field_types = defaultdict(set)
+        known_field_types = defaultdict(dict)
         for base_field_name, field_properties in mapping["properties"].items():
             field_name_heirarchy = parent_field_names + [base_field_name]
             flattened_field_name = ".".join(field_name_heirarchy)
             if self.projection is not None and flattened_field_name.lower() not in self.projection:
                 continue
             field_type = FIELD_TYPE_MAP[field_properties.get("type", "object")]
-            known_field_types[flattened_field_name.lower()].add((flattened_field_name, field_type,))
+            known_field_types[flattened_field_name.lower()][flattened_field_name] = field_type
             if field_type is dict and "properties" in field_properties:
                 known_field_types = known_field_types | self.get_known_field_types(field_properties, field_name_heirarchy)
         return known_field_types
@@ -222,7 +230,7 @@ class GenericClassAdConverter():
                 self.log_once(f"Encountered new/unknown attr {attr}")
         return field_name, field_type
 
-    def convert_attr_to_dict(self, attr: str, value, full_ad: classad.ClassAd, preserve_case: bool = False) -> dict:
+    def convert_attr_to_dict(self, attr: str, value, full_ad, preserve_case: bool = False, plain_dict: bool = False) -> dict:
         """
         Convert the given ClassAd attribute-value pair to a dict
         which can be merged into a document.
@@ -235,7 +243,7 @@ class GenericClassAdConverter():
 
         # 1. Get the field name and field type mappings if known
         known_mappings = True
-        field_names_types = dict(self.known_field_types[attr.lower()])
+        field_names_types = self.known_field_types[attr.lower()]
 
         # 2. Get the field name and field type mappings if unknown
         if not field_names_types:
@@ -257,13 +265,14 @@ class GenericClassAdConverter():
                     converted = []
                     failed = False
                     for item in value:
-                        try:
-                            item = json.loads(json.dumps(item, default=classad_json_serializer))
-                        except Exception:
-                            self.log_once(f"Failed to serialize item in {attr} to JSON")
-                            doc[field_name.lower()] = self.truncate(field_name.lower(), str(value))
-                            failed = True
-                            continue
+                        if not plain_dict:
+                            try:
+                                item = json.loads(json.dumps(item, default=classad_json_serializer))
+                            except Exception:
+                                self.log_once(f"Failed to serialize item in {attr} to JSON")
+                                doc[field_name.lower()] = self.truncate(field_name.lower(), str(value))
+                                failed = True
+                                continue
                         converted.append(item)
                     if not (failed and field_name == field_name.lower()):
                         doc[field_name] = converted
@@ -295,42 +304,43 @@ class GenericClassAdConverter():
                 else:  # Otherwise recursively convert it, flattening the namespace
                     if not known_mappings:  # Preserve original case if we don't know what this is
                         field_name = attr  # because it might match a dynamic template later.
-                    doc.update(self.convert_ad_to_dict(value, field_name, preserve_case=known_mappings))
+                    doc.update(self.convert_ad_to_dict(value, field_name, preserve_case=known_mappings, plain_dict=plain_dict))
                     continue  # Then at this point, this mapping is already done
 
             # 6. Handle everything else
             else:
 
-                # Evaluate any ClassAd expressions
-                # (in the context of their ad if possible)
-                if isinstance(value, classad.ExprTree):
-                    try:
-                        if isinstance(full_ad, classad.ClassAd):
-                            eval_value = value.eval(full_ad)
-                        else:
-                            eval_value = value.eval()
-                    except Exception:
-                        self.log_once(f"Failed to evaluate {attr} in the context of its ClassAd")
-                        eval_value = classad.Value.Error
-
-                    # If eval doesn't work, store the expr as a string if possible
-                    if isinstance(eval_value, (classad.Value, classad.ExprTree)):
-                        field_name = f"{field_name}_EXPR"
-                        field_type = str
+                if not plain_dict:
+                    # Evaluate any ClassAd expressions
+                    # (in the context of their ad if possible)
+                    if isinstance(value, classad.ExprTree):
                         try:
-                            field_value = field_type(value)
+                            if isinstance(full_ad, classad.ClassAd):
+                                eval_value = value.eval(full_ad)
+                            else:
+                                eval_value = value.eval()
                         except Exception:
-                            self.log_once(f"Failed to get string repr of expr in {attr}")
-                            continue
-                    else:
-                        value = eval_value
+                            self.log_once(f"Failed to evaluate {attr} in the context of its ClassAd")
+                            eval_value = classad.Value.Error
 
-                # Prevent Error or Undefined ClassAd values from getting through,
-                # for example, classad.Value.Undefined acts a literal 2 for
-                # any type casting done on it, which we don't want.
-                if isinstance(value, classad.Value):
-                    self.log_once(f"Got ClassAd value {value.name} for {attr}", logging.info)
-                    continue
+                        # If eval doesn't work, store the expr as a string if possible
+                        if isinstance(eval_value, (classad.Value, classad.ExprTree)):
+                            field_name = f"{field_name}_EXPR"
+                            field_type = str
+                            try:
+                                field_value = field_type(value)
+                            except Exception:
+                                self.log_once(f"Failed to get string repr of expr in {attr}")
+                                continue
+                        else:
+                            value = eval_value
+
+                    # Prevent Error or Undefined ClassAd values from getting through,
+                    # for example, classad.Value.Undefined acts a literal 2 for
+                    # any type casting done on it, which we don't want.
+                    if isinstance(value, classad.Value):
+                        self.log_once(f"Got ClassAd value {value.name} for {attr}", logging.info)
+                        continue
 
                 try:
                     if field_type is list and not isinstance(value, list):
@@ -361,12 +371,16 @@ class GenericClassAdConverter():
             return f"{value[:MAX_KEYWORD_LEN-3]}..."
         return value
 
-    def convert_ad_to_dict(self, ad, parent_attr="", preserve_case: bool = False) -> dict:
+    def convert_ad_to_dict(self, ad, parent_attr="", preserve_case: bool = False, plain_dict: bool = False) -> dict:
         """
-        Convert a ClassAd to a document (dict) with flattened objects.
+        Convert a ClassAd (or plain dict) to a document (dict) with flattened objects.
 
         If preserve_case is True, unknown subfield names retain their original
         casing rather than being lowercased by the DEFAULT dynamic template fallback.
+
+        If plain_dict is True, classad-specific processing (ExprTree evaluation,
+        classad.Value guards, JSON roundtrip on list items) is skipped, which is
+        more efficient when the input is already a plain Python dict.
         """
         doc = {}
 
@@ -386,7 +400,7 @@ class GenericClassAdConverter():
                 continue
 
             # 5. Convert attr
-            doc.update(self.convert_attr_to_dict(attr, value, ad, preserve_case=preserve_case))
+            doc.update(self.convert_attr_to_dict(attr, value, ad, preserve_case=preserve_case, plain_dict=plain_dict))
 
         return doc
 

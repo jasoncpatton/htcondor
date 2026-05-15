@@ -130,6 +130,7 @@ INDEXED_KEYWORD_ATTRS = {
     "OsUser",
     "Out",
     "OutputDestination",
+    "OutputDirectory",
     "Owner",
     "PeriodicHoldReason",
     "PeriodicReleaseReason",

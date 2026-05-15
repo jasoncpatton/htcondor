@@ -212,27 +212,48 @@ class ElasticsearchInterface(GenericInterface):
         """
         body = []
         for doc_id, doc in docs:
-            doc["metadata"] = metadata  # bolt on the metadata
+            doc["metadata"] = {**doc.get("metadata", {}), **metadata}  # merge existing with chunk-level metadata
             action = {"index": {"_id": doc_id}}  # index the doc w/ this id
             body.append(json.dumps(action))
             body.append(json.dumps(doc, sort_keys=True, default=classad_json_serializer))
         return "\n".join(body)
 
 
-    def get_error_count(self, result: dict) -> int:
+    def get_error_count(self, result: dict, n_ads: int = 0, raise_on_errors: bool = False) -> int:
         """
         Crawl through the result from the bulk API,
         print out any errors,
         and return the number of errors encountered.
         https://www.elastic.co/docs/api/doc/elasticsearch/operation/operation-bulk#operation-bulk-200
+
+        n_ads is the number of docs submitted; used as the error count when the
+        response is malformed (missing 'errors' key), since we cannot confirm any
+        docs were indexed successfully.
+
+        If raise_on_errors is True, raise RuntimeError instead of returning when
+        the response is malformed or when indexing errors are present.
         """
+        if "errors" not in result:
+            msg = f"Bulk response missing 'errors' key (possible timeout or partial response): {result}"
+            if raise_on_errors:
+                raise RuntimeError(msg)
+            logging.warning(msg)
+            return n_ads
+
         if not result["errors"]:
             return 0
+
+        took = result.get("took")
+        items = result.get("items", [])
+        n_success = sum(1 for item in items if item.get("index", {}).get("status", 0) < 300)
+
+        if n_success == 0 and not items:
+            logging.error(f"Bulk response has errors=true but no items; raw result: {result}")
 
         n_errors = 0
         error_types = defaultdict(int)
         error_reasons = []
-        for item in result["items"]:
+        for item in items:
             try:
                 error = item["index"]["error"]
                 n_errors += 1
@@ -253,12 +274,19 @@ class ElasticsearchInterface(GenericInterface):
         error_type_strs = []
         for (error_type, n) in error_type_list[:3]:
             error_type_strs.append(f"{error_type} ({n} times)")
-        logging.error(f"{n_errors} errors encountered during bulk index.")
+        took_str = f", took {took}ms on ES side" if took is not None else ""
+        logging.error(f"{n_errors} errors encountered during bulk index ({n_success} succeeded{took_str}).")
         logging.error(f"""Most common error type(s): {", ".join(error_type_strs)}.""")
         try:
             logging.error(f"""Example reason: {random.choice(error_reasons)}.""")
         except IndexError:
             pass
+
+        if raise_on_errors:
+            raise RuntimeError(
+                f"{n_errors} errors in bulk index ({n_success} succeeded{took_str}); "
+                f"most common type(s): {', '.join(error_type_strs)}"
+            )
 
         return n_errors
 
@@ -272,6 +300,8 @@ class ElasticsearchInterface(GenericInterface):
         client = self.get_handle()
 
         body = self.make_bulk_body(ads, metadata)
-        result = client.bulk(body=body, index=index)
-        n_errors = self.get_error_count(result)
+        result = client.bulk(body=body, index=index, filter_path=["errors", "took", "items.*.index.error.**", "items.*.index.status"])
+        n_errors = self.get_error_count(result, n_ads=len(ads), **kwargs)
         return {"success": len(ads)-n_errors, "error": n_errors}
+
+
