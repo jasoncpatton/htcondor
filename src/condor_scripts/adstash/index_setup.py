@@ -41,7 +41,7 @@ def check_interface_health(interface: GenericInterface) -> None:
         logging.warning(report)
 
 
-def set_index_mappings(
+def compute_index_mappings(
         interface: GenericInterface,
         index: str,
         ad_type: str,
@@ -63,10 +63,6 @@ def set_index_mappings(
 
     mappings["properties"] = merge_properties(existing_properties, custom_properties, default_properties)
     mappings["dynamic_templates"] = merge_dynamic_templates(default_templates, custom_templates)
-
-    if interface.is_search_engine:
-        logging.info(f"Pushing computed index mappings to {interface.__class__.__name__}")
-        interface.update_mappings(index, mappings)
 
     return mappings
 
@@ -131,19 +127,25 @@ def log_mappings(interface_name: str, log_dir: Path, mappings: dict, settings: d
 def setup_index(interface: GenericInterface, ad_type: str, args: Namespace) -> Tuple[dict]:
     test_interface(interface=interface)
     check_interface_health(interface=interface)
-    mappings = set_index_mappings(
+    # Compute mappings
+    mappings = compute_index_mappings(
         interface=interface,
         index=args.se_index_name,
         ad_type=ad_type,
         custom_properties=args.custom_field_properties or {},
         custom_templates=args.custom_dynamic_templates or OrderedDict(),
         )
+    # Update settings (including total_fields.limit) before pushing mappings.
     settings = set_index_settings(
         interface=interface,
         index=args.se_index_name,
         mappings=mappings,
         custom_settings=args.custom_index_settings or {},
     )
+    # Now push updated mappings
+    if interface.is_search_engine:
+        logging.info(f"Pushing computed index mappings to {interface.__class__.__name__}")
+        interface.update_mappings(args.se_index_name, mappings)
     if args.se_log_mappings:
         log_mappings(
             interface_name=args.interface,
