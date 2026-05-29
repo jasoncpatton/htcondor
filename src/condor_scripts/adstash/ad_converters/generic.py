@@ -395,9 +395,14 @@ class GenericClassAdConverter():
             if attr in self.ignore_attrs:
                 continue
 
-            # 4. Skip any attrs not in the projection
-            if self.projection is not None and attr.lower() not in self.projection:
-                continue
+            # 4. Skip any attrs not in the projection.
+            # Use a prefix check so that sub-properties of projected object fields
+            # (e.g. TransferInputStats.FileCount when TransferInputStats is projected)
+            # are not filtered out during recursion.
+            if self.projection is not None:
+                attr_lower = attr.lower()
+                if attr_lower not in self.projection and not any(attr_lower.startswith(p + ".") for p in self.projection):
+                    continue
 
             # 5. Convert attr
             doc.update(self.convert_attr_to_dict(attr, value, ad, preserve_case=preserve_case, plain_dict=plain_dict))
