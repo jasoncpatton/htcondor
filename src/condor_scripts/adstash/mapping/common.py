@@ -23,11 +23,11 @@ METADATA_MAPPING = {
         "properties": {
             "condor_adstash_hostname": {"type": "keyword"},
             "condor_adstash_username": {"type": "keyword"},
-            "condor_adstash_runtime": {"type": "date", "format": "epoch_second"},
+            "condor_adstash_runtime": {"type": "date", "format": "epoch_second||strict_date_optional_time"},
             "condor_adstash_version": {"type": "keyword"},
             "condor_adstash_platform": {"type": "keyword"},
             "condor_adstash_source": {"type": "keyword"},
-            "condor_history_runtime": {"type": "date", "format": "epoch_second"},
+            "condor_history_runtime": {"type": "date", "format": "epoch_second||strict_date_optional_time"},
             "condor_history_host_platform": {"type": "keyword"},
             "condor_history_host_version": {"type": "keyword"},
             "condor_history_host_name": {"type": "keyword"},

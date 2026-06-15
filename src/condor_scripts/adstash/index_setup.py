@@ -9,7 +9,7 @@ from pathlib import Path
 from adstash.interfaces.generic import GenericInterface
 from adstash.mapping.functions import get_default_mapping_properties, merge_properties, merge_dynamic_templates
 from adstash.mapping import job, job_epoch, transfer_epoch
-from adstash.settings import SearchEngineSettings
+from adstash.settings import SearchEngineSettings, calculate_field_limit
 
 
 AD_TYPE_DEFAULT_MAPPINGS = {
@@ -145,7 +145,19 @@ def setup_index(interface: GenericInterface, ad_type: str, args: Namespace) -> T
     # Now push updated mappings
     if interface.is_search_engine:
         logging.info(f"Pushing computed index mappings to {interface.__class__.__name__}")
-        interface.update_mappings(args.se_index_name, mappings)
+        try:
+            interface.update_mappings(args.se_index_name, mappings)
+        except Exception as e:
+            if "total fields" in str(e).lower() and "exceeded" in str(e).lower():
+                new_limit = calculate_field_limit(mappings)
+                logging.warning(
+                    f"Field limit exceeded pushing mappings (limit may have reset after rollover), "
+                    f"bumping to {new_limit} and retrying"
+                )
+                interface.update_settings(args.se_index_name, {"index.mapping.total_fields.limit": new_limit})
+                interface.update_mappings(args.se_index_name, mappings)
+            else:
+                raise
     if args.se_log_mappings:
         log_mappings(
             interface_name=args.interface,

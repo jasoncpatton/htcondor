@@ -642,7 +642,7 @@ DYNAMIC_TEMPLATES = [
     }},
     {"date_attrs": {  # Attrs ending in "Date" are usually timestamps
         "match": r"*Date",
-        "mapping": {"type": "date", "format": "epoch_second"},
+        "mapping": {"type": "date", "format": "epoch_second||strict_date_optional_time"},
     }},
     {"provisioned_attrs": {  # Attrs ending in "Provisioned" are
         "match": r"*Provisioned",  # resource numbers

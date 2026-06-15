@@ -65,6 +65,11 @@ DEFAULT_ILM_POLICY = {
 }
 
 
+def calculate_field_limit(mappings, previous_limit=0):
+    """Return the total_fields.limit to use for the given mappings (2x field count, at least previous_limit)."""
+    return max(2 * count_total_fields(mappings), int(previous_limit))
+
+
 class SearchEngineSettings():
 
     def __init__(self, index_name, mappings, custom_settings={}, existing_settings={}):
@@ -115,7 +120,7 @@ class SearchEngineSettings():
     # this the field limit needs to be upped occasionally.
     def _calculate_update_settings_fields_limit(self):
         previous_limit = int(self.settings.get("index.mapping.total_fields.limit", 0))
-        self.update_settings["index.mapping.total_fields.limit"] = max(2 * count_total_fields(self.mappings), previous_limit)
+        self.update_settings["index.mapping.total_fields.limit"] = calculate_field_limit(self.mappings, previous_limit)
         # Using limit = 5000 as an arbitrary point to start warning about performance degredation
         if self.update_settings["index.mapping.total_fields.limit"] > 5000 and self.update_settings["index.mapping.total_fields.limit"] > previous_limit:
             logging.warning(f"Large index.mapping.total_fields.limit: {self.update_settings['index.mapping.total_fields.limit']}")

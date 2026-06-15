@@ -157,7 +157,7 @@ def get_default_mapping_properties(ad_type) -> dict:
             [(field, {"type": "keyword", "index": "false", "ignore_above": ad_type.MAX_KEYWORD_LEN}) for field in ad_type.NON_INDEXED_KEYWORD_ATTRS] +
             [(field, {"type": "double"}) for field in ad_type.FLOAT_ATTRS] +
             [(field, {"type": "long"}) for field in ad_type.INT_ATTRS] +
-            [(field, {"type": "date", "format": "epoch_second"}) for field in ad_type.DATE_ATTRS] +
+            [(field, {"type": "date", "format": "epoch_second||strict_date_optional_time"}) for field in ad_type.DATE_ATTRS] +
             [(field, {"type": "boolean"}) for field in ad_type.BOOL_ATTRS] +
             [(field, {"type": "object", "dynamic": True}) for field in ad_type.OBJECT_ATTRS] +
             [(field, {"type": "nested", "dynamic": True}) for field in ad_type.NESTED_ATTRS]

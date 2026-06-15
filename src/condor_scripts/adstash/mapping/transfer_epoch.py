@@ -123,7 +123,7 @@ DYNAMIC_TEMPLATES = [
     }},
     {"date_attrs": {  # Attrs ending in "Date" are usually timestamps
         "match": r"*Date",
-        "mapping": {"type": "date", "format": "epoch_second"},
+        "mapping": {"type": "date", "format": "epoch_second||strict_date_optional_time"},
     }},
     {"target_bool_attrs": {  # Attrs starting with "Want", "Has", or
         "match_pattern": "regex",  # "Is" are usually boolean checks
