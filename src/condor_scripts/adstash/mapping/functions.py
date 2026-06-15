@@ -71,6 +71,8 @@ def merge_properties(*properties_in: dict) -> dict:
             # If the fields have the same type, merge additional properties
             if new_field_type == existing_field_type:
                 for key, value in mapping.items():
+                    if key == "format" and "format" in properties_out[field]:
+                        continue  # format is immutable on existing fields
                     properties_out[field][key] = value
                 continue
 
