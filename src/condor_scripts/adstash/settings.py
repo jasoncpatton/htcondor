@@ -26,6 +26,9 @@ DEFAULT_INITIAL_SETTINGS = {
             "ignore_malformed": True,  # https://www.elastic.co/guide/en/elasticsearch/reference/7.17/ignore-malformed.html#ignore-malformed-setting
         },
         "refresh_interval": "60s",  # https://www.elastic.co/guide/en/elasticsearch/reference/7.17/tune-for-indexing-speed.html#_unset_or_increase_the_refresh_interval
+        "write": {
+            "wait_for_active_shards": "all",  # block writes unless all shard copies are available
+        },
     }
 }
 
@@ -49,6 +52,9 @@ DEFAULT_ILM_POLICY = {
                 "actions": {
                     "forcemerge": {
                         "max_num_segments": 1  # merge down to single segment
+                    },
+                    "set_priority": {
+                        "priority": 50
                     }
                 }
             },
