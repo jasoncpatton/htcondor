@@ -149,7 +149,10 @@ def setup_index(interface: GenericInterface, ad_type: str, args: Namespace) -> T
             interface.update_mappings(args.se_index_name, mappings)
         except Exception as e:
             if "total fields" in str(e).lower() and "exceeded" in str(e).lower():
-                new_limit = calculate_field_limit(mappings)
+                active_index = interface.get_active_index(args.se_index_name)
+                current_settings = interface.get_settings(active_index)
+                current_limit = int(current_settings["index"]["mapping"]["total_fields"]["limit"])
+                new_limit = max(calculate_field_limit(mappings), current_limit * 2)
                 logging.warning(
                     f"Field limit exceeded pushing mappings (limit may have reset after rollover), "
                     f"bumping to {new_limit} and retrying"
