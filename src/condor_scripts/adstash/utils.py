@@ -154,20 +154,30 @@ def set_up_logging(args):
     if args.log_file is not None:
         log_path = Path(args.log_file)
 
-        # Make sure the parent directory exists
-        if not log_path.parent.exists():
-            logging.debug(f"Attempting to create {log_path.parent}")
-            try:
-                log_path.parent.mkdir(parents=True)
-            except Exception:
-                logging.exception(
-                    f"Error while creating log file directory {log_path.parent}"
-                )
-                sys.exit(1)
+        try:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            logging.exception(
+                f"Could not create log file directory {log_path.parent}"
+            )
+            logging.error(
+                "Try setting the log directory with --log_file or the ADSTASH_LOG config knob"
+            )
+            sys.exit(1)
 
-        filehandler = logging.handlers.RotatingFileHandler(
-            args.log_file, maxBytes=100000
-        )
+        try:
+            filehandler = logging.handlers.RotatingFileHandler(
+                args.log_file, maxBytes=100000
+            )
+        except Exception:
+            logging.exception(
+                f"Could not open log file {log_path}"
+            )
+            logging.error(
+                "Try setting the log file with --log_file or the ADSTASH_LOG config knob"
+            )
+            sys.exit(1)
+
         filehandler.setFormatter(logging.Formatter(fmt=fmt, datefmt=datefmt))
         logger.addHandler(filehandler)
 

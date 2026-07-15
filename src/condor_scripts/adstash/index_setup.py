@@ -124,6 +124,37 @@ def log_mappings(interface_name: str, log_dir: Path, mappings: dict, settings: d
         logging.exception(f"Failed to write last mappings and/or settings to {log_dir}")
 
 
+def init_index(ad_type: str, args: Namespace) -> None:
+    """Write out JSON files for initializing a new search engine index."""
+    if ad_type not in AD_TYPE_DEFAULT_MAPPINGS:
+        raise ValueError(f"Unknown ad type '{ad_type}', choose from: {', '.join(AD_TYPE_DEFAULT_MAPPINGS)}")
+
+    interface = GenericInterface()
+
+    mappings = compute_index_mappings(
+        interface=interface,
+        index=args.se_index_name,
+        ad_type=ad_type,
+        custom_properties=args.custom_field_properties or {},
+        custom_templates=args.custom_dynamic_templates or OrderedDict(),
+    )
+
+    ses = SearchEngineSettings(
+        index_name=args.se_index_name,
+        mappings=mappings,
+        custom_settings=args.custom_index_settings or {},
+    )
+
+    print(f"Preparing index using default mappings for {ad_type} ads.")
+
+    ses.write_index_settings(
+        output_directory=args.init_output_directory,
+        use_alias=args.use_alias,
+        use_ilm=args.use_ilm,
+        use_template=args.use_template,
+    )
+
+
 def setup_index(interface: GenericInterface, ad_type: str, args: Namespace) -> Tuple[dict]:
     test_interface(interface=interface)
     check_interface_health(interface=interface)

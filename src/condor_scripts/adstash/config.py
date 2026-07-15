@@ -54,7 +54,7 @@ def get_default_config(name="ADSTASH"):
         "se_use_https": False,
         "se_timeout": 2 * 60,
         "se_bunch_size": 250,
-        "se_index_name": "htcondor-000001",
+        "se_index_name": "htcondor",
         "se_log_mappings": True,
         "json_dir": Path.cwd(),
         "custom_field_properties": None,
@@ -654,6 +654,12 @@ def get_config(argv=None):
         "--init_index",
         action="store_true",
         help="Write out JSON files to set up a new index for your search engine then exit."
+    )
+    init_index_group.add_argument(
+        "--init_ad_type",
+        choices=["history", "job_epoch_history", "transfer_epoch_history"],
+        default="history",
+        help="Ad type to use for default mappings [default: %(default)s]",
     )
     init_index_group.add_argument(
         "--init_output_directory",

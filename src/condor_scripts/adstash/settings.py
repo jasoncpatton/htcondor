@@ -15,6 +15,7 @@
 
 import logging
 import json
+import sys
 
 from pathlib import Path
 
@@ -141,38 +142,38 @@ class SearchEngineSettings():
         ilm_policy_name = f"{self.alias}-ilm"
         if use_ilm:
             if not use_alias:
-                raise RuntimeError("Use of ILM requires using aliases for rollover")
+                print("ERROR: Use of ILM requires using aliases for rollover.", file=sys.stderr)
+                return
             if not use_template:
-                logging.warning(f"Recommend use of index templates when using ILM to preserve")
-                logging.warning(f"setttings and mappings after rollovers.")
+                print("WARNING: Recommend use of index templates when using ILM to preserve")
+                print("  settings and mappings after rollovers.")
             self.settings["index.lifecycle.name"] = ilm_policy_name
             self.settings["index.lifecycle.rollover_alias"] = self.alias
             files["ilm"] = {"name": f"{ilm_policy_name}.json", "contents": DEFAULT_ILM_POLICY}
 
         if use_template:
             if not use_alias:
-                logging.warning(f"Recommend use of aliases when using index templates.")
-                logging.warning(f"Assuming that the index match pattern is {self.alias}-*.")
+                print("WARNING: Recommend use of aliases when using index templates.")
+                print(f"  Assuming that the index match pattern is {self.alias}-*.")
             template = self.get_index_template()
             files["template"] = {"name": f"{self.alias}-template.json", "contents": template}
         else:
             index = self.index_definition
 
         if use_alias:
-            if self.alias[-1] in [str(x) for x in range(10)]:
-                logging.warning(f"Alias {self.alias} ends with a number, which is not recommended")
+            if self.alias[-1].isdigit():
+                print(f"WARNING: Alias {self.alias} ends with a number, which is not recommended")
                 if "-0" in self.alias:
-                    logging.warning(f"Consider using: --se_index_name={'-'.join(self.alias.split('-')[:-1])}")
+                    print(f"  Consider using: --se_index_name={'-'.join(self.alias.split('-')[:-1])}")
             index["aliases"] = {self.alias: {"is_write_index": True}}
             index_name = f"{self.alias}-000001"
-            logging.warning(f"The initial index will be named {index_name}")
+            print(f"The initial index will be named {index_name}")
         else:
             index_name = self.alias
         files["index"] = {"name": f"{index_name}.json", "contents": index}
 
-        logging.warning(f"Writing out JSON files and README instructions for setting up your index to {output_directory}")
         if not output_directory.exists():
-            logging.warning(f"{output_directory} does not exist, creating it for you")
+            print(f"{output_directory} does not exist, creating it")
             output_directory.mkdir(parents=True)
 
         curl_put = 'curl -X PUT -u "${ELASTIC_USER}:${ELASTIC_PASSWORD}" -H "Content-Type: application/json"'
@@ -191,7 +192,8 @@ See: https://www.elastic.co/docs/api/doc/elasticsearch/operation/operation-indic
         }
         readme_path = output_directory / "README"
         if readme_path.exists():
-            raise IOError(f"{readme_path} already exists, please specify an empty directory.")
+            print(f"ERROR: {readme_path} already exists, please specify an empty directory.", file=sys.stderr)
+            return
         with readme_path.open("w") as f:
             if len(files) > 1:
                 f.write("""IMPORTANT: These operations should be done in order!
@@ -200,13 +202,17 @@ Failure to do so may result in templates and ILM policies not applying.\n\n""")
                 if obj_type in files:
                     f.write(readme[obj_type].replace("{filename}", files[obj_type]["name"]))
                     f.write("\n\n")
+            if use_alias:
+                f.write(f"NOTE: Since aliases are enabled, the index can be referenced as {self.alias}\n")
+                f.write(f"instead of {index_name} when querying or configuring condor_adstash.\n")
 
         for obj in files.values():
             file_path = output_directory / obj["name"]
             if file_path.exists():
-                raise IOError(f"{file_path} already exists, please specify an empty directory.")
+                print(f"ERROR: {file_path} already exists, please specify an empty directory.", file=sys.stderr)
+                return
             with file_path.open("w") as f:
                 json.dump(obj["contents"], f, indent=2)
 
-        logging.warning(f"Index setup files written to {output_directory}")
-        logging.warning("Remember to remove --init_index before running condor_adstash after setting up your index")
+        print(f"Index setup files written to {output_directory}")
+        print("Remember to remove --init_index before running condor_adstash after setting up your index.")
